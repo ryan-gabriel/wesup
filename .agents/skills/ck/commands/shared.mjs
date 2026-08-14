@@ -270,7 +270,7 @@ export function renderContextMd(ctx) {
 }
 
 /** Render the bordered briefing box used by /ck:resume */
-export function renderBriefingBox(ctx, _meta = {}) {
+export function renderBriefingBox(ctx) {
   const latest = ctx.sessions?.[ctx.sessions.length - 1] || {};
   const W = 57;
   const pad = (str, w) => {
@@ -344,7 +344,7 @@ export function renderInfoBlock(ctx) {
 }
 
 /** Render ASCII list table used by /ck:list */
-export function renderListTable(entries, cwd, _todayStr) {
+export function renderListTable(entries, cwd) {
   // entries: [{name, contextDir, path, context, lastUpdated}]
   // Sorted alphabetically by contextDir before calling
   const rows = entries.map((e, i) => {

@@ -28,9 +28,13 @@ interface ParsedSchema {
 
 function stripUnsupported(sql: string): string {
   return sql
+    .replace(/--[^\n]*/g, "")
     .replace(/CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION[\s\S]*?\$\$\s*;/gi, "")
     .replace(/CREATE\s+TRIGGER[^;]+;/gi, "")
     .replace(/CREATE\s+POLICY[^;]+;/gi, "")
+    .replace(/DROP\s+POLICY[^;]+;/gi, "")
+    .replace(/GRANT\s+[^;]+;/gi, "")
+    .replace(/REVOKE\s+[^;]+;/gi, "")
     .replace(/ALTER\s+TABLE[^;]*ENABLE\s+ROW\s+LEVEL\s+SECURITY[^;]*;/gi, "")
     .replace(/ALTER\s+TABLE[^;]*FORCE\s+ROW\s+LEVEL\s+SECURITY[^;]*;/gi, "");
 }
@@ -54,7 +58,9 @@ function loadSchema(): ParsedSchema {
   };
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
-    const ast = parse(stripUnsupported(sql));
+    const clean = stripUnsupported(sql);
+    if (clean.trim().length === 0) continue;
+    const ast = parse(clean);
     for (const stmt of ast) {
       if (stmt.type === "create table") {
         const name = stmt.name.name;
@@ -136,9 +142,15 @@ function extractPolicies(sql: string): Array<{
   table: string;
   action: string;
 }> {
+  const dropped = new Set<string>();
+  const dropRe = /DROP\s+POLICY\s+IF\s+EXISTS\s+"?([a-zA-Z0-9_]+)"?\s+ON\s+public\.([a-zA-Z0-9_]+)/gi;
+  for (const m of sql.matchAll(dropRe)) {
+    dropped.add(`${m[1]}:${m[2]}`);
+  }
   const policies: Array<{ name: string; table: string; action: string }> = [];
   const blockRe = /CREATE\s+POLICY\s+"?([a-zA-Z0-9_]+)"?\s+ON\s+public\.([a-zA-Z0-9_]+)\s+FOR\s+(ALL|SELECT|INSERT|UPDATE|DELETE)/gi;
   for (const m of sql.matchAll(blockRe)) {
+    if (dropped.has(`${m[1]}:${m[2]}`)) continue;
     policies.push({ name: m[1], table: m[2], action: m[3].toUpperCase() });
   }
   return policies;
@@ -174,6 +186,7 @@ describe("migration files", () => {
     for (const file of files) {
       const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
       const clean = stripUnsupported(sql);
+      if (clean.trim().length === 0) continue;
       expect(() => parse(clean), `syntax error in ${file}`).not.toThrow();
     }
   });
@@ -182,7 +195,7 @@ describe("migration files", () => {
     for (const file of files) {
       const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
       expect(sql).not.toMatch(/DROP\s+TABLE/i);
-      expect(sql).not.toMatch(/TRUNCATE/i);
+      expect(sql).not.toMatch(/TRUNCATE\s+TABLE/i);
     }
   });
 });
@@ -324,12 +337,27 @@ describe("row level security", () => {
     }
   });
 
-  it("keeps admin_audit_logs append-only (no UPDATE/DELETE policies)", () => {
-    for (const p of policies) {
-      if (p.table === "admin_audit_logs") {
-        expect(["SELECT", "INSERT"].includes(p.action)).toBe(true);
-      }
+  it("keeps admin_audit_logs client-side read-only (no INSERT/UPDATE/DELETE policies)", () => {
+    const auditPolicies = policies.filter((p) => p.table === "admin_audit_logs");
+    expect(auditPolicies.length).toBeGreaterThan(0);
+    for (const p of auditPolicies) {
+      expect(p.action).toBe("SELECT");
     }
+  });
+
+  it("guards admin_audit_logs against TRUNCATE", () => {
+    expect(allSql).toMatch(
+      /create\s+trigger\s+admin_audit_logs_no_truncate\b[^;]*\bbefore\s+truncate\s+on\s+(?:public\.)?admin_audit_logs/i,
+    );
+  });
+
+  it("defines the server-side audit writer", () => {
+    expect(allSql).toMatch(
+      /create\s+(?:or\s+replace\s+)?function\s+public\.write_audit_log/i,
+    );
+    expect(allSql).toMatch(
+      /revoke\s+execute\s+on\s+function\s+public\.write_audit_log\b[^;]*\bfrom\s+public,\s*anon,\s*authenticated/i,
+    );
   });
 
   it("grants UMKM read access to visible batches only via policies", () => {

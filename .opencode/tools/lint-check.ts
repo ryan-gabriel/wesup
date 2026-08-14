@@ -11,15 +11,6 @@ import * as fs from "fs"
 
 type Linter = "biome" | "eslint" | "ruff" | "pylint" | "golangci-lint"
 
-interface LintResult {
-  success: boolean
-  linter?: Linter
-  command?: string
-  instructions?: string
-  message?: string
-  error?: string
-}
-
 const lintCheckTool: ToolDefinition = tool({
   description:
     "Detect linter for a target path and return command for check/fix runs. Supports cross-platform command generation.",

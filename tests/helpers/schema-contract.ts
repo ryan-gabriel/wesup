@@ -625,11 +625,24 @@ export const REQUIRED_FUNCTIONS = [
   "is_supplier",
   "handle_new_user",
   "prevent_admin_audit_logs_mutation",
+  "promote_supplier_on_approval",
+  "approve_supplier",
+  "reject_supplier",
+  "takedown_batch",
+  "resolve_dispute",
+  "approve_refund",
+  "complete_refund",
+  "suspend_user",
+  "ban_user",
+  "unban_user",
+  "write_audit_log",
 ];
 
 export const REQUIRED_TRIGGERS = [
   { name: "on_auth_user_created", table: "auth.users" },
   { name: "admin_audit_logs_immutable", table: "admin_audit_logs" },
+  { name: "admin_audit_logs_no_truncate", table: "admin_audit_logs" },
+  { name: "promote_supplier_on_approval", table: "supplier_profiles" },
 ];
 
 export const EXPECTED_TABLE_NAMES = Object.keys(EXPECTED_TABLES);

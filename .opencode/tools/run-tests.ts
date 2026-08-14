@@ -41,7 +41,7 @@ const runTestsTool: ToolDefinition = tool({
     const testFramework = await detectTestFramework(cwd)
 
     // Build command
-    let cmd: string[] = [packageManager]
+    const cmd: string[] = [packageManager]
 
     if (packageManager === "npm") {
       cmd.push("run", "test")

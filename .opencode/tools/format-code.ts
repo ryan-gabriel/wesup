@@ -12,15 +12,6 @@ import * as fs from "fs"
 
 type Formatter = "biome" | "prettier" | "black" | "gofmt" | "rustfmt" | "swift-format"
 
-interface FormatResult {
-  success: boolean
-  formatter?: Formatter
-  command?: string
-  instructions?: string
-  message?: string
-  error?: string
-}
-
 const formatCodeTool: ToolDefinition = tool({
   description:
     "Detect formatter for a file and return the exact command to run (Biome, Prettier, Black, gofmt, rustfmt, swift-format). Supports cross-platform command generation.",
@@ -45,7 +36,7 @@ const formatCodeTool: ToolDefinition = tool({
         })
       }
 
-      const command = buildFormatterCommand(detected, args.filePath, cwd)
+      const command = buildFormatterCommand(detected, args.filePath)
       return JSON.stringify({
         success: true,
         formatter: detected,
@@ -103,7 +94,7 @@ function detectFormatter(cwd: string, ext: string): Formatter | null {
   return null
 }
 
-function buildFormatterCommand(formatter: Formatter, filePath: string, cwd?: string): string {
+function buildFormatterCommand(formatter: Formatter, filePath: string): string {
   // Normalize to forward slashes so the emitted command is identical on every
   // platform. `path.normalize` yields backslashes on Windows, which broke the
   // command string (and Windows CI); all formatter CLIs accept `/` on Windows.

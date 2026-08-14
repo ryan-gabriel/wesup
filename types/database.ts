@@ -1,17 +1,9 @@
 export type UserRole = "supplier" | "umkm" | "admin";
 export type AccountStatus =
-  | "active"
-  | "suspended_temporary"
-  | "suspended_permanent"
-  | "banned";
+  "active" | "suspended_temporary" | "suspended_permanent" | "banned";
 export type VerificationStatus = "pending" | "approved" | "rejected";
 export type BatchStatus =
-  | "draft"
-  | "published"
-  | "closed"
-  | "cancelled"
-  | "takedown"
-  | "completed";
+  "draft" | "published" | "closed" | "cancelled" | "takedown" | "completed";
 export type RegistrationStatus =
   | "registered"
   | "pending_payment"
@@ -22,20 +14,14 @@ export type RegistrationStatus =
   | "cancelled"
   | "refund_pending"
   | "refunded";
-export type PaymentStatus = "pending" | "paid" | "expired" | "failed" | "refunded";
+export type PaymentStatus =
+  "pending" | "paid" | "expired" | "failed" | "refunded";
 export type EscrowStatus = "held" | "released" | "refunded" | "forfeited";
 export type DisputeStatus =
-  | "pending"
-  | "under_review"
-  | "resolved_supplier"
-  | "resolved_umkm";
+  "pending" | "under_review" | "resolved_supplier" | "resolved_umkm";
 export type RefundTrigger = "takedown" | "force_majeure" | "dispute_won";
 export type RefundStatus =
-  | "pending"
-  | "waiting_bank_account"
-  | "processing"
-  | "completed"
-  | "failed";
+  "pending" | "waiting_bank_account" | "processing" | "completed" | "failed";
 export type NotificationType =
   | "payment_due"
   | "payment_success"
@@ -79,6 +65,7 @@ export interface Database {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["profiles"]["Insert"]>;
+        Relationships: [];
       };
       supplier_profiles: {
         Row: {
@@ -115,7 +102,10 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["supplier_profiles"]["Insert"]>;
+        Update: Partial<
+          Database["public"]["Tables"]["supplier_profiles"]["Insert"]
+        >;
+        Relationships: [];
       };
       supplier_bank_accounts: {
         Row: {
@@ -138,7 +128,10 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["supplier_bank_accounts"]["Insert"]>;
+        Update: Partial<
+          Database["public"]["Tables"]["supplier_bank_accounts"]["Insert"]
+        >;
+        Relationships: [];
       };
       umkm_profiles: {
         Row: {
@@ -163,7 +156,10 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["umkm_profiles"]["Insert"]>;
+        Update: Partial<
+          Database["public"]["Tables"]["umkm_profiles"]["Insert"]
+        >;
+        Relationships: [];
       };
       umkm_bank_accounts: {
         Row: {
@@ -184,7 +180,10 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["umkm_bank_accounts"]["Insert"]>;
+        Update: Partial<
+          Database["public"]["Tables"]["umkm_bank_accounts"]["Insert"]
+        >;
+        Relationships: [];
       };
       recurring_configs: {
         Row: {
@@ -211,7 +210,10 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["recurring_configs"]["Insert"]>;
+        Update: Partial<
+          Database["public"]["Tables"]["recurring_configs"]["Insert"]
+        >;
+        Relationships: [];
       };
       batches: {
         Row: {
@@ -255,6 +257,7 @@ export interface Database {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["batches"]["Insert"]>;
+        Relationships: [];
       };
       batch_tiers: {
         Row: {
@@ -276,6 +279,7 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["batch_tiers"]["Insert"]>;
+        Relationships: [];
       };
       batch_timeline: {
         Row: {
@@ -296,7 +300,10 @@ export interface Database {
           estimated_ready_at: string;
           created_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["batch_timeline"]["Insert"]>;
+        Update: Partial<
+          Database["public"]["Tables"]["batch_timeline"]["Insert"]
+        >;
+        Relationships: [];
       };
       registrations: {
         Row: {
@@ -329,7 +336,10 @@ export interface Database {
           created_at?: string;
           updated_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["registrations"]["Insert"]>;
+        Update: Partial<
+          Database["public"]["Tables"]["registrations"]["Insert"]
+        >;
+        Relationships: [];
       };
       registration_counters: {
         Row: {
@@ -342,7 +352,10 @@ export interface Database {
           current_count?: number;
           updated_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["registration_counters"]["Insert"]>;
+        Update: Partial<
+          Database["public"]["Tables"]["registration_counters"]["Insert"]
+        >;
+        Relationships: [];
       };
       payments: {
         Row: {
@@ -376,6 +389,7 @@ export interface Database {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["payments"]["Insert"]>;
+        Relationships: [];
       };
       payment_webhook_logs: {
         Row: {
@@ -396,7 +410,10 @@ export interface Database {
           error_message?: string | null;
           created_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["payment_webhook_logs"]["Insert"]>;
+        Update: Partial<
+          Database["public"]["Tables"]["payment_webhook_logs"]["Insert"]
+        >;
+        Relationships: [];
       };
       pickup_codes: {
         Row: {
@@ -418,6 +435,7 @@ export interface Database {
           used_by_supplier_id?: string | null;
         };
         Update: Partial<Database["public"]["Tables"]["pickup_codes"]["Insert"]>;
+        Relationships: [];
       };
       pickup_events: {
         Row: {
@@ -440,7 +458,10 @@ export interface Database {
           notes?: string | null;
           created_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["pickup_events"]["Insert"]>;
+        Update: Partial<
+          Database["public"]["Tables"]["pickup_events"]["Insert"]
+        >;
+        Relationships: [];
       };
       escrow_holds: {
         Row: {
@@ -468,6 +489,7 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["escrow_holds"]["Insert"]>;
+        Relationships: [];
       };
       disputes: {
         Row: {
@@ -499,6 +521,7 @@ export interface Database {
           updated_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["disputes"]["Insert"]>;
+        Relationships: [];
       };
       dispute_evidence: {
         Row: {
@@ -517,7 +540,10 @@ export interface Database {
           description?: string | null;
           created_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["dispute_evidence"]["Insert"]>;
+        Update: Partial<
+          Database["public"]["Tables"]["dispute_evidence"]["Insert"]
+        >;
+        Relationships: [];
       };
       refund_requests: {
         Row: {
@@ -552,7 +578,10 @@ export interface Database {
           completed_at?: string | null;
           created_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["refund_requests"]["Insert"]>;
+        Update: Partial<
+          Database["public"]["Tables"]["refund_requests"]["Insert"]
+        >;
+        Relationships: [];
       };
       ratings: {
         Row: {
@@ -574,6 +603,7 @@ export interface Database {
           created_at?: string;
         };
         Update: Partial<Database["public"]["Tables"]["ratings"]["Insert"]>;
+        Relationships: [];
       };
       notifications: {
         Row: {
@@ -600,7 +630,10 @@ export interface Database {
           whatsapp_status?: string | null;
           created_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["notifications"]["Insert"]>;
+        Update: Partial<
+          Database["public"]["Tables"]["notifications"]["Insert"]
+        >;
+        Relationships: [];
       };
       admin_audit_logs: {
         Row: {
@@ -625,7 +658,10 @@ export interface Database {
           user_agent?: string | null;
           created_at?: string;
         };
-        Update: Partial<Database["public"]["Tables"]["admin_audit_logs"]["Insert"]>;
+        Update: Partial<
+          Database["public"]["Tables"]["admin_audit_logs"]["Insert"]
+        >;
+        Relationships: [];
       };
     };
     Views: Record<string, never>;
@@ -637,6 +673,96 @@ export interface Database {
       is_supplier: {
         Args: Record<PropertyKey, never>;
         Returns: boolean;
+      };
+      approve_supplier: {
+        Args: {
+          p_user_id: string;
+          p_ip_address?: string | null;
+          p_user_agent?: string | null;
+        };
+        Returns: void;
+      };
+      reject_supplier: {
+        Args: {
+          p_user_id: string;
+          p_reason: string;
+          p_ip_address?: string | null;
+          p_user_agent?: string | null;
+        };
+        Returns: void;
+      };
+      takedown_batch: {
+        Args: {
+          p_batch_id: string;
+          p_reason: string;
+          p_ip_address?: string | null;
+          p_user_agent?: string | null;
+        };
+        Returns: void;
+      };
+      resolve_dispute: {
+        Args: {
+          p_dispute_id: string;
+          p_winner: string;
+          p_notes?: string | null;
+          p_ip_address?: string | null;
+          p_user_agent?: string | null;
+        };
+        Returns: void;
+      };
+      approve_refund: {
+        Args: {
+          p_refund_id: string;
+          p_ip_address?: string | null;
+          p_user_agent?: string | null;
+        };
+        Returns: void;
+      };
+      complete_refund: {
+        Args: {
+          p_refund_id: string;
+          p_transfer_proof_url: string;
+          p_ip_address?: string | null;
+          p_user_agent?: string | null;
+        };
+        Returns: void;
+      };
+      suspend_user: {
+        Args: {
+          p_user_id: string;
+          p_suspended_until: string;
+          p_ip_address?: string | null;
+          p_user_agent?: string | null;
+        };
+        Returns: void;
+      };
+      ban_user: {
+        Args: {
+          p_user_id: string;
+          p_ip_address?: string | null;
+          p_user_agent?: string | null;
+        };
+        Returns: void;
+      };
+      unban_user: {
+        Args: {
+          p_user_id: string;
+          p_ip_address?: string | null;
+          p_user_agent?: string | null;
+        };
+        Returns: void;
+      };
+      write_audit_log: {
+        Args: {
+          p_admin_id: string;
+          p_action: AuditAction;
+          p_target_type: string;
+          p_target_id: string;
+          p_details?: Record<string, unknown> | null;
+          p_ip_address?: string | null;
+          p_user_agent?: string | null;
+        };
+        Returns: void;
       };
     };
     Enums: {

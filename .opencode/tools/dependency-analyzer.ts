@@ -22,20 +22,6 @@ interface DependencyInfo {
   }
 }
 
-interface AnalysisResult {
-  success: boolean
-  packageManager: string
-  dependencies: DependencyInfo[]
-  summary: {
-    total: number
-    outdated: number
-    vulnerable: number
-    unused: number
-  }
-  recommendations: string[]
-  error?: string
-}
-
 const dependencyAnalyzerTool: ToolDefinition = tool({
   description:
     "Analyze project dependencies for outdated packages, security vulnerabilities, and unused dependencies. Supports npm, pnpm, yarn, and bun.",
@@ -58,19 +44,18 @@ const dependencyAnalyzerTool: ToolDefinition = tool({
       const cwd = context.worktree || context.directory
       const analysisType = args.type ?? "all"
       const fix = args.fix ?? false
-      const depth = args.depth ?? 1
 
       // Detect package manager
       const packageManager = detectPackageManager(cwd)
       
       // Analyze dependencies
-      const dependencies = await analyzeDependencies(cwd, packageManager, depth)
+      const dependencies = await analyzeDependencies(cwd)
       
       // Generate summary
       const summary = generateSummary(dependencies)
       
       // Generate recommendations
-      const recommendations = generateRecommendations(dependencies, summary, analysisType)
+      const recommendations = generateRecommendations(dependencies, summary)
 
       return JSON.stringify({
         success: true,
@@ -104,9 +89,7 @@ function detectPackageManager(cwd: string): string {
 }
 
 async function analyzeDependencies(
-  cwd: string,
-  packageManager: string,
-  depth: number
+  cwd: string
 ): Promise<DependencyInfo[]> {
   const dependencies: DependencyInfo[] = []
   
@@ -173,8 +156,7 @@ function generateSummary(dependencies: DependencyInfo[]) {
 
 function generateRecommendations(
   dependencies: DependencyInfo[],
-  summary: { total: number; outdated: number; vulnerable: number; unused: number },
-  analysisType: string
+  summary: { total: number; outdated: number; vulnerable: number; unused: number }
 ): string[] {
   const recommendations: string[] = []
   

@@ -513,6 +513,18 @@ describe.skipIf(noDbUrl)("live Supabase database (pg)", () => {
       expect(code).toBe("P0001");
     });
 
+    it("blocks TRUNCATE on admin_audit_logs (no_truncate trigger)", async () => {
+      const code = await expectViolation(`truncate public.admin_audit_logs`);
+      expect(code).toBe("P0001");
+    });
+
+    it("rejects write_audit_log from a non-admin session", async () => {
+      const code = await expectViolation(
+        `select public.write_audit_log(gen_random_uuid(), 'ban_user', 'profiles', gen_random_uuid())`,
+      );
+      expect(code).toBe("P0001");
+    });
+
     it("rejects negative refund amount (CHECK)", async () => {
       const code = await expectViolation(
         `insert into public.refund_requests
@@ -523,12 +535,78 @@ describe.skipIf(noDbUrl)("live Supabase database (pg)", () => {
       expect(code).toBe("23514");
     });
   });
+
+  describe("admin action rpc audit write path", () => {
+    it("approve_supplier transitions the supplier and appends an audit row", async () => {
+      const client = await pool!.connect();
+      try {
+        await client.query("begin");
+        const { rows: adminRows } = await client.query<{ uid: string }>(
+          `insert into auth.users (id, instance_id, aud, role, email, encrypted_password)
+           values (gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', $1, 'x')
+           returning id as uid`,
+          [`rpc-admin-${Math.random().toString(36).slice(2, 10)}@example.com`],
+        );
+        const adminId = adminRows[0].uid;
+        await client.query(
+          `insert into public.profiles (id, role, status, full_name)
+           values ($1, 'admin', 'active', 'Audit Admin')
+           on conflict (id) do update set role = 'admin', status = 'active'`,
+          [adminId],
+        );
+        const { rows: supplierRows } = await client.query<{ uid: string }>(
+          `insert into auth.users (id, instance_id, aud, role, email, encrypted_password)
+           values (gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', $1, 'x')
+           returning id as uid`,
+          [`rpc-supplier-${Math.random().toString(36).slice(2, 10)}@example.com`],
+        );
+        const supplierId = supplierRows[0].uid;
+        await client.query(
+          `insert into public.supplier_profiles
+             (user_id, business_name, address, latitude, longitude, nik, ktp_photo_url)
+           values ($1, 'RPC Test', 'addr', 1, 1, $2, 'https://x/ktp.jpg')`,
+          [supplierId, `rpc-${Math.random().toString(36).slice(2, 16)}`],
+        );
+        await client.query(
+          `select set_config('request.jwt.claims',
+             json_build_object('sub', $1::text, 'role', 'authenticated')::text, true)`,
+          [adminId],
+        );
+        await client.query(
+          `select public.approve_supplier($1::uuid, '1.2.3.4', 'live-test-agent')`,
+          [supplierId],
+        );
+        const { rows: statusRows } = await client.query<{
+          verification_status: string;
+        }>(
+          `select verification_status from public.supplier_profiles where user_id = $1`,
+          [supplierId],
+        );
+        expect(statusRows[0].verification_status).toBe("approved");
+        const { rows: logRows } = await client.query<{
+          action_type: string;
+          admin_id: string;
+          ip_address: string;
+        }>(
+          `select action_type, admin_id, ip_address from public.admin_audit_logs
+           where target_id = $1 and action_type = 'verify_supplier'`,
+          [supplierId],
+        );
+        expect(logRows).toHaveLength(1);
+        expect(logRows[0].admin_id).toBe(adminId);
+        expect(logRows[0].ip_address).toBe("1.2.3.4");
+        await client.query("rollback");
+      } finally {
+        client.release();
+      }
+    });
+  });
 });
 
 describe.skipIf(noRestUrl)("live Supabase database (REST)", () => {
   it("serves every business table through PostgREST", async () => {
-    const results = await Promise.all(
-      EXPECTED_TABLE_NAMES.map(async (table) => {
+    const fetchTable = async (table: string) => {
+      for (let attempt = 0; ; attempt++) {
         const res = await fetch(
           `${SUPABASE_URL}/rest/v1/${table}?select=*&limit=1`,
           {
@@ -536,13 +614,31 @@ describe.skipIf(noRestUrl)("live Supabase database (REST)", () => {
               apikey: PUBLISHABLE_KEY!,
               Authorization: `Bearer ${PUBLISHABLE_KEY!}`,
             },
+            signal: AbortSignal.timeout(15_000),
           },
         );
-        return { table, status: res.status };
-      }),
-    );
+        const body = await res.text();
+        if (res.status === 200 || attempt === 2 || res.status < 500) {
+          return { table, status: res.status, body };
+        }
+      }
+    };
+    const chunk = <T>(items: T[], size: number): T[][] => {
+      const out: T[][] = [];
+      for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+      return out;
+    };
+    const results = (
+      await Promise.all(
+        chunk(EXPECTED_TABLE_NAMES, 5).map(async (group) =>
+          Promise.all(group.map(fetchTable)),
+        ),
+      )
+    ).flat();
     const failures = results.filter((r) => r.status !== 200);
-    expect(failures).toEqual([]);
+    expect(
+      failures.map((f) => `${f.table}: ${f.status} ${f.body.slice(0, 160)}`),
+    ).toEqual([]);
   });
 
   it("returns empty list for anon read of profiles (RLS enforced)", async () => {

@@ -46,15 +46,6 @@ interface PermissionEvent {
   args: unknown
 }
 
-interface FileEvent {
-  path: string
-  type?: string
-}
-
-interface TodoEvent {
-  todos: Array<{ text: string; done: boolean }>
-}
-
 /**
  * Read ECC version from package.json
  * Falls back to a default if package.json cannot be read
@@ -193,8 +184,7 @@ export const ECCHooksPlugin: ECCHooksPluginFn = async ({
      * Action: Runs tsc --noEmit to check for type errors
      */
     "tool.execute.after": async (
-      input: ToolInput,
-      output: unknown
+      input: ToolInput
     ) => {
       const filePath = getFilePath(input.args)
       if (input.tool === "edit" && filePath) {
