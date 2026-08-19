@@ -52,6 +52,7 @@ export interface Database {
           status: AccountStatus;
           full_name: string;
           phone: string | null;
+          email: string | null;
           created_at: string;
           updated_at: string;
         };
@@ -61,6 +62,7 @@ export interface Database {
           status?: AccountStatus;
           full_name: string;
           phone?: string | null;
+          email?: string | null;
           created_at?: string;
           updated_at?: string;
         };
@@ -76,7 +78,7 @@ export interface Database {
           longitude: number;
           business_photo_url: string | null;
           ktp_photo_url: string | null;
-          nik: string;
+          nik: string | null;
           verification_status: VerificationStatus;
           verification_notes: string | null;
           verified_by: string | null;
@@ -93,7 +95,7 @@ export interface Database {
           longitude: number;
           business_photo_url?: string | null;
           ktp_photo_url?: string | null;
-          nik: string;
+          nik?: string | null;
           verification_status?: VerificationStatus;
           verification_notes?: string | null;
           verified_by?: string | null;
@@ -672,6 +674,10 @@ export interface Database {
       };
       is_supplier: {
         Args: Record<PropertyKey, never>;
+        Returns: boolean;
+      };
+      is_email_registered: {
+        Args: { p_email: string };
         Returns: boolean;
       };
       approve_supplier: {

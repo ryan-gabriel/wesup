@@ -25,14 +25,15 @@ Defined in migration `20260731000100_core_types_profiles.sql`. Every status colu
 
 ### Module 1 — IAM (migration 0001)
 
-**`profiles`** — one row per `auth.users` account. Auto-created by the `handle_new_user()` trigger on signup. The root of the identity graph: every other table links back to it via `user_id`/`supplier_id`/`umkm_id`/`admin_id` → `profiles(id)`.
+**`profiles`** — one row per `auth.users` account. Auto-created by the `handle_new_user()` trigger on signup. The normalized nullable `email` mirror is synchronized from Auth and protected by the case-insensitive unique index `profiles_email_lower_unique`; server-side registration checks retrieve this column directly. The table is the root of the identity graph: every other table links back to it via `user_id`/`supplier_id`/`umkm_id`/`admin_id` → `profiles(id)`.
 
 | Column | Purpose |
 |---|---|
 | `id` | `= auth.users.id` (1:1 with Supabase Auth) |
 | `role` | supplier / umkm / admin |
 | `status` | active / suspended / banned |
-| `full_name`, `phone` | basic identity |
+| ull_name, phone | basic identity |
+| email | normalized Auth email mirror for server-side uniqueness checks |
 
 RLS: user sees only own row; admin sees all (`is_admin()` helper).
 
@@ -296,3 +297,6 @@ Objects are never hard-deleted with their rows. The app moves a file to `archive
 4. **Denormalized ids for RLS** — `disputes` stores both `umkm_id` and `supplier_id` so policies don't need multi-table joins.
 5. **Append-only where it matters** — `payment_webhook_logs`, `admin_audit_logs` (trigger-blocked mutations), `archive/` storage folder.
 6. **Path-embedded record ids** — storage paths encode the owning record UUID so storage policies can validate ownership against the related table.
+## Supplier registration flow (initial onboarding)
+
+The `/supplier/register` flow creates a Supabase Auth user with the forced initial role `umkm`, uploads the client-compressed business photo to the private `wesup-assets` bucket at `business/<user_id>/<uuid>.webp`, and inserts `supplier_profiles` with `verification_status = 'pending'`. `business_photo_url` stores the private object path. `nik` and `ktp_photo_url` are nullable during initial onboarding and are completed during the Admin KYC step. Email availability and the final duplicate check retrieve the normalized email directly from `public.profiles` using the server-only service-role client; database uniqueness and Supabase Auth remain the final race-condition safeguards.
