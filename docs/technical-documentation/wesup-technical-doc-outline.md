@@ -113,15 +113,22 @@ Pengembangan WeSUP pada tahap MVP dibatasi dengan ketentuan berikut:
 |---|---|---|
 | Repository | Monorepository (single Next.js project) | Frontend & backend dalam satu codebase, satu deployment target |
 | Frontend & Backend | Next.js (App Router + API Routes) | UI rendering + business logic (batch, tier, refund, suspend, webhook listener) dalam satu framework |
-| Database & Object Storage | Supabase (PostgreSQL + Storage + Auth) | Data relasional terpusat + penyimpanan foto dengan kompresi otomatis + manajemen otorisasi role-based |
+| Database & Object Storage | Supabase (PostgreSQL + Storage + Auth) | Data relasional terpusat + penyimpanan foto (format WebP hasil kompresi frontend) + manajemen otorisasi role-based |
 | Cache & Atomic Operation | Redis (Upstash serverless-compatible) | Atomic counter volume tier, Distributed Lock (SETNX), cache progress bar tier real-time |
 | Payment | QRIS via Midtrans Sandbox | Gerbang pembayaran untuk pengujian tanpa dokumen legal perusahaan |
 | Notifikasi | Fonnte / WhatsApp API Trial & In-App UI | Peringatan batas waktu, pembukaan jendela pembayaran, fallback in-app |
+| Scheduled Trigger (Notifikasi) | GitHub Actions (gratis) | Menjalankan skrip notifikasi terjadwal (misal reminder H-1 recurring post); skrip manual disiapkan sebagai fallback untuk keperluan presentasi/demo |
 | Deployment | Vercel | Hosting Next.js app; Supabase & Upstash terhubung via environment variable |
 
 **Alasan Pemilihan Arsitektur — Event-Driven Check (Lazy Evaluation):**
 
 Alih-alih menggunakan polling terjadwal (cron/scheduled job), sistem melakukan pengecekan status *cutoff* secara langsung saat pengguna membuka halaman batch terkait. Jika waktu sudah melewati cutoff, barulah logic lock (penguncian harga/tier) di-trigger secara on-demand. Pendekatan ini lebih efisien secara biaya komputasi serverless dan sepenuhnya menghindari kompleksitas maintenance cron job, termasuk risiko job yang gagal jalan atau tumpang tindih eksekusi.
+
+> **Catatan:** Prinsip *no-cron* ini berlaku untuk logika transaksi inti (cutoff, escrow, sanksi). Khusus untuk notifikasi terjadwal yang sifatnya non-kritikal (pengingat H-1), tim menggunakan GitHub Actions sebagai scheduled trigger gratis, dengan skrip manual sebagai cadangan saat demo/presentasi.
+
+**Kompresi Gambar — Format WebP:**
+
+Seluruh gambar yang diunggah pengguna (foto lokasi usaha, foto produk, bukti sengketa) dikompresi di sisi frontend menjadi format **WebP** sebelum dikirim ke server. Perubahan dari rencana awal (kompresi generik) ke WebP spesifik dipilih karena ukuran file WebP lebih kecil dibanding JPEG/PNG pada kualitas visual setara, sehingga beban pemrosesan dan penyimpanan di backend/Supabase Storage berkurang signifikan.
 
 ---
 
