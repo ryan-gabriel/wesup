@@ -19,7 +19,11 @@ export type PaymentStatus =
 export type EscrowStatus = "held" | "released" | "refunded" | "forfeited";
 export type DisputeStatus =
   "pending" | "under_review" | "resolved_supplier" | "resolved_umkm";
-export type RefundTrigger = "takedown" | "force_majeure" | "dispute_won";
+export type RefundTrigger =
+  | "takedown"
+  | "force_majeure"
+  | "dispute_won"
+  | "supplier_cancel";
 export type RefundStatus =
   "pending" | "waiting_bank_account" | "processing" | "completed" | "failed";
 export type NotificationType =
@@ -40,7 +44,8 @@ export type AuditAction =
   | "complete_refund"
   | "suspend_user"
   | "ban_user"
-  | "unban_user";
+  | "unban_user"
+  | "cancel_batch";
 
 export interface Database {
   public: {
@@ -769,6 +774,41 @@ export interface Database {
           p_user_agent?: string | null;
         };
         Returns: void;
+      };
+      cancel_batch: {
+        Args: {
+          p_batch_id: string;
+          p_reason: string;
+          p_ip_address?: string | null;
+          p_user_agent?: string | null;
+        };
+        Returns: void;
+      };
+      search_batches: {
+        Args: {
+          p_query?: string | null;
+          p_categories?: string[] | null;
+          p_lat?: number | null;
+          p_lng?: number | null;
+          p_radius_km?: number | null;
+          p_limit?: number | null;
+          p_offset?: number | null;
+        };
+        Returns: {
+          id: string;
+          supplier_id: string;
+          title: string;
+          description: string | null;
+          category: string;
+          min_quantity: number;
+          product_photo_url: string | null;
+          pickup_address: string;
+          latitude: number;
+          longitude: number;
+          tiers: unknown;
+          distance_km: number | null;
+          total_count: number;
+        }[];
       };
     };
     Enums: {

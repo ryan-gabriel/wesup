@@ -3,8 +3,10 @@ import {
   requireRole,
   toAuthResponse,
   type AuthClient,
+  type AuthContext,
 } from "@/lib/supabase/auth";
 import { getServerClient } from "@/lib/supabase/server";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { isUuid, parsePositiveInt } from "@/lib/admin/validation";
 import type { AuditAction } from "@/types/database";
 
@@ -69,11 +71,15 @@ export async function GET(req: Request) {
   }
 
   const client = await getServerClient();
+  let authCtx: AuthContext;
   try {
-    await requireRole(client as unknown as AuthClient, ["admin"]);
+    authCtx = await requireRole(client as unknown as AuthClient, ["admin"]);
   } catch (err) {
     return toAuthResponse(err);
   }
+
+  const limited = await enforceRateLimit(req, "admin", authCtx.userId);
+  if (limited) return limited;
 
   let query = client
     .from("admin_audit_logs")

@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { NextRequest } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { POST as approveSupplier } from "@/app/api/admin/suppliers/[id]/approve/route";
@@ -13,9 +13,14 @@ import { POST as banUser } from "@/app/api/admin/users/[id]/ban/route";
 import { POST as unbanUser } from "@/app/api/admin/users/[id]/unban/route";
 import { GET as listAuditLogs } from "@/app/api/admin/audit-logs/route";
 import { getServerClient } from "@/lib/supabase/server";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 vi.mock("@/lib/supabase/server", () => ({
   getServerClient: vi.fn(),
+}));
+
+vi.mock("@/lib/rate-limit", () => ({
+  enforceRateLimit: vi.fn(),
 }));
 
 const mockGetServerClient = vi.mocked(getServerClient);
@@ -110,6 +115,20 @@ function mockAuditLogsClient(rows: unknown[] = []) {
 describe("POST /api/admin/suppliers/[id]/approve", () => {
   beforeEach(() => {
     mockGetServerClient.mockReset();
+    vi.mocked(enforceRateLimit).mockReset();
+    vi.mocked(enforceRateLimit).mockResolvedValue(null);
+  });
+
+  it("returns 429 when the rate limiter blocks the request", async () => {
+    mockAdminClient({});
+    vi.mocked(enforceRateLimit).mockResolvedValueOnce(
+      NextResponse.json({ error: "rate_limited" }, { status: 429 }),
+    );
+    const res = await approveSupplier(
+      postJson(`/api/admin/suppliers/${TARGET_ID}/approve`, {}),
+      routeParams(TARGET_ID),
+    );
+    expect(res.status).toBe(429);
   });
 
   it("returns 200 and calls approve_supplier rpc with ip and user agent", async () => {

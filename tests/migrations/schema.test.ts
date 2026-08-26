@@ -58,6 +58,13 @@ function loadSchema(): ParsedSchema {
   };
   for (const file of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, file), "utf8");
+    const addValueRe =
+      /ALTER\s+TYPE\s+(?:public\.)?([a-zA-Z0-9_]+)\s+ADD\s+VALUE\s+(?:IF\s+NOT\s+EXISTS\s+)?'([^']+)'/gi;
+    for (const m of sql.matchAll(addValueRe)) {
+      const values = schema.enums.get(m[1]) ?? [];
+      if (!values.includes(m[2])) values.push(m[2]);
+      schema.enums.set(m[1], values);
+    }
     const clean = stripUnsupported(sql);
     if (clean.trim().length === 0) continue;
     const ast = parse(clean);

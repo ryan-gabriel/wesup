@@ -3,8 +3,10 @@ import {
   requireRole,
   toAuthResponse,
   type AuthClient,
+  type AuthContext,
 } from "@/lib/supabase/auth";
 import { getServerClient } from "@/lib/supabase/server";
+import { enforceRateLimit } from "@/lib/rate-limit";
 import { isUuid } from "@/lib/admin/validation";
 
 export const dynamic = "force-dynamic";
@@ -19,11 +21,15 @@ export async function POST(
   }
 
   const client = await getServerClient();
+  let authCtx: AuthContext;
   try {
-    await requireRole(client as unknown as AuthClient, ["admin"]);
+    authCtx = await requireRole(client as unknown as AuthClient, ["admin"]);
   } catch (err) {
     return toAuthResponse(err);
   }
+
+  const limited = await enforceRateLimit(req, "admin", authCtx.userId);
+  if (limited) return limited;
 
   const { error } = await client.rpc("ban_user", {
     p_user_id: id,

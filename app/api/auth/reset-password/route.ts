@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: NextRequest) {
+  const limited = await enforceRateLimit(request, "reset-password");
+  if (limited) return limited;
+
   const client = await getServerClient();
 
   let body: Record<string, unknown>;

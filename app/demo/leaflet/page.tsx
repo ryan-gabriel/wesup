@@ -3,6 +3,8 @@ import Link from "next/link";
 import "leaflet/dist/leaflet.css";
 import { LeafletDemoClient } from "@/components/demo/LeafletDemoClient";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "Demo Peta Leaflet",
   description:

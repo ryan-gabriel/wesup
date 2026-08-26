@@ -49,7 +49,7 @@ export const EXPECTED_ENUMS: Record<string, string[]> = {
     "resolved_supplier",
     "resolved_umkm",
   ],
-  refund_trigger: ["takedown", "force_majeure", "dispute_won"],
+  refund_trigger: ["takedown", "force_majeure", "dispute_won", "supplier_cancel"],
   refund_status: [
     "pending",
     "waiting_bank_account",
@@ -77,6 +77,7 @@ export const EXPECTED_ENUMS: Record<string, string[]> = {
     "suspend_user",
     "ban_user",
     "unban_user",
+    "cancel_batch",
   ],
 };
 
@@ -615,6 +616,7 @@ export const CRITICAL_INDEXES = [
   "escrow_holds_status_idx",
   "disputes_status_idx",
   "refund_requests_status_idx",
+  "refund_requests_registration_unique",
   "notifications_user_read_idx",
   "ratings_supplier_idx",
   "admin_audit_logs_admin_created_idx",
@@ -636,6 +638,9 @@ export const REQUIRED_FUNCTIONS = [
   "ban_user",
   "unban_user",
   "write_audit_log",
+  "cancel_batch",
+  "handle_batch_cancellation",
+  "search_batches",
 ];
 
 export const REQUIRED_TRIGGERS = [
@@ -643,6 +648,7 @@ export const REQUIRED_TRIGGERS = [
   { name: "admin_audit_logs_immutable", table: "admin_audit_logs" },
   { name: "admin_audit_logs_no_truncate", table: "admin_audit_logs" },
   { name: "promote_supplier_on_approval", table: "supplier_profiles" },
+  { name: "batches_cancel_side_effects", table: "batches" },
 ];
 
 export const EXPECTED_TABLE_NAMES = Object.keys(EXPECTED_TABLES);
