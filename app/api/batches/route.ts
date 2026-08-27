@@ -7,6 +7,7 @@ import {
   type AuthClient,
 } from "@/lib/supabase/auth";
 import { parsePositiveInt } from "@/lib/admin/validation";
+import { parseBatchTimeline } from "@/lib/batches/timeline";
 
 export const dynamic = "force-dynamic";
 
@@ -128,17 +129,13 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Validate timeline
-  const timeline =
-    body.timeline && typeof body.timeline === "object"
-      ? (body.timeline as Record<string, unknown>)
-      : null;
-  if (!timeline) {
-    return NextResponse.json(
-      { error: "Timeline is required" },
-      { status: 400 },
-    );
+  // PRD Time-Travel Validation: absolute timestamps, strictly increasing
+  // Buka < Tutup < Mulai Payment < Batas Akhir Payment < Ready
+  const timelineResult = parseBatchTimeline(body.timeline);
+  if ("error" in timelineResult) {
+    return NextResponse.json({ error: timelineResult.error }, { status: 400 });
   }
+  const timeline = timelineResult.data;
 
   // Insert batch
   const { data: batch, error: batchError } = await client
@@ -188,16 +185,11 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  // Insert timeline
   const { error: timelineError } = await client
     .from("batch_timeline")
     .insert({
       batch_id: batch.id,
-      registration_opens_at: String(timeline.registration_opens_at ?? ""),
-      registration_closes_at: String(timeline.registration_closes_at ?? ""),
-      payment_opens_at: String(timeline.payment_opens_at ?? ""),
-      payment_closes_at: String(timeline.payment_closes_at ?? ""),
-      estimated_ready_at: String(timeline.estimated_ready_at ?? ""),
+      ...timeline,
     });
 
   if (timelineError) {

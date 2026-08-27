@@ -784,6 +784,12 @@ export interface Database {
         };
         Returns: void;
       };
+      publish_batch: {
+        Args: {
+          p_batch_id: string;
+        };
+        Returns: void;
+      };
       search_batches: {
         Args: {
           p_query?: string | null;

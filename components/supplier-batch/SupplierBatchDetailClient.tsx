@@ -16,7 +16,7 @@ import {
   Truck,
 } from "lucide-react";
 import DeleteCatalogDialog from "@/components/supplier-batch/DeleteCatalogDialog";
-import { supplierBatchMockRepository } from "@/lib/supplier-batch/mock-repository";
+import { supplierBatchRepository } from "@/lib/supplier-batch/repository";
 import {
   getCancellationWarnings,
   initialSupplierBatchState,
@@ -116,7 +116,7 @@ export default function SupplierBatchDetailClient({ batchId }: SupplierBatchDeta
   useEffect(() => {
     const controller = new AbortController();
     dispatch({ type: "loadStarted" });
-    void supplierBatchMockRepository
+    void supplierBatchRepository
       .getById(batchId, { signal: controller.signal })
       .then((batch) => dispatch(batch ? { type: "loadSucceeded", batch } : { type: "loadNotFound" }))
       .catch((error: unknown) => {
@@ -145,7 +145,7 @@ export default function SupplierBatchDetailClient({ batchId }: SupplierBatchDeta
     const controller = new AbortController();
     cancelControllerRef.current = controller;
     dispatch({ type: "cancelStarted" });
-    void supplierBatchMockRepository
+    void supplierBatchRepository
       .cancel(batch.id, { reason: state.cancellationReason }, { signal: controller.signal })
       .then((cancelled) => {
         if (!controller.signal.aborted) dispatch({ type: "cancelSucceeded", batch: cancelled });

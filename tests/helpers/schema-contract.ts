@@ -639,6 +639,7 @@ export const REQUIRED_FUNCTIONS = [
   "unban_user",
   "write_audit_log",
   "cancel_batch",
+  "publish_batch",
   "handle_batch_cancellation",
   "search_batches",
 ];
