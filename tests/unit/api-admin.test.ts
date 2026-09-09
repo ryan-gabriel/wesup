@@ -306,6 +306,19 @@ describe("POST /api/admin/disputes/[id]/resolve", () => {
       error: "winner must be supplier or umkm",
     });
   });
+
+  it("returns 409 when the dispute is already resolved (irreversible)", async () => {
+    const { rpc } = mockAdminClient({});
+    rpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: "dispute already resolved" },
+    });
+    const res = await resolveDispute(
+      postJson("/api/admin/disputes/x/resolve", { winner: "supplier" }),
+      routeParams(TARGET_ID),
+    );
+    expect(res.status).toBe(409);
+  });
 });
 
 describe("POST /api/admin/refunds/[id]/approve", () => {
