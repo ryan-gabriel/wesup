@@ -8,7 +8,6 @@ import {
 import { isUuid } from "@/lib/admin/validation";
 import { acquireLock, releaseLock } from "@/app/api/_lib/distributed-lock";
 import { apiLocked } from "@/app/api/_lib/response";
-import { triggerLazyCutoff } from "@/lib/batches/cutoff-runner";
 
 export const dynamic = "force-dynamic";
 
@@ -55,21 +54,6 @@ export async function POST(
 
     if (regError || !registration) {
       return NextResponse.json({ error: "Registration not found" }, { status: 404 });
-    }
-
-    if (registration.status === "registered") {
-      // Lazy cutoff: kunci harga dulu (request pertama pasca-tutup migrasi),
-      // lalu baca ulang status sebelum validasi payment window
-      await triggerLazyCutoff(client, registration.batch_id, Date.now());
-      const { data: refreshed } = await client
-        .from("registrations")
-        .select("status, final_amount")
-        .eq("id", id)
-        .single();
-      if (refreshed) {
-        registration.status = refreshed.status;
-        registration.final_amount = refreshed.final_amount;
-      }
     }
 
     if (registration.status !== "pending_payment") {

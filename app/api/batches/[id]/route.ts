@@ -1,7 +1,6 @@
 import { NextResponse } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import { isUuid } from "@/lib/admin/validation";
-import { triggerLazyCutoff } from "@/lib/batches/cutoff-runner";
 
 export const dynamic = "force-dynamic";
 
@@ -29,19 +28,6 @@ export async function GET(
 
   if (error || !batch) {
     return NextResponse.json({ error: "Batch not found" }, { status: 404 });
-  }
-
-  // Lazy cutoff: pembaca pertama pasca-tutup memicu penguncian harga
-  const detailTimeline = Array.isArray(batch.batch_timeline)
-    ? batch.batch_timeline[0]
-    : batch.batch_timeline;
-  if (
-    batch.status === "published" &&
-    detailTimeline &&
-    Date.now() > Date.parse(detailTimeline.registration_closes_at)
-  ) {
-    const cutoff = await triggerLazyCutoff(client, id, Date.now());
-    if (cutoff?.applied) batch.status = "closed";
   }
 
   // Get current registration count

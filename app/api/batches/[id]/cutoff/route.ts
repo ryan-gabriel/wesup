@@ -1,70 +1,78 @@
-import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { getServerClient } from "@/lib/supabase/server";
 import {
-  requireActive,
+  requireRole,
   toAuthResponse,
   type AuthClient,
 } from "@/lib/supabase/auth";
 import { isUuid } from "@/lib/admin/validation";
 import { apiError, apiSuccess } from "@/app/api/_lib/response";
-import { runBatchCutoff } from "@/lib/batches/cutoff-runner";
+import { enforceRateLimit } from "@/lib/rate-limit";
+import {
+  acquireCutoffLock,
+  releaseCutoffLock,
+  resetVolumeCounter,
+} from "@/lib/orders/registration-counter";
 
 export const dynamic = "force-dynamic";
 
 /**
- * POST /api/batches/[id]/cutoff — picu penguncian harga tier (hybrid trigger).
+ * POST /api/batches/[id]/cutoff — Volume-Limiting Gatekeeper (PRD 3.1/3.2).
  *
- * Tanpa body: timestamp selalu dari server (Date.now) agar tak bisa
- * dimanipulasi client. Idempoten — aman dipanggil berulang. Lazy hook di
- * route register/pay/batch-detail memanggil logika yang sama otomatis.
+ * Tanpa body: hanya supplier pemilik / admin (ditegakkan juga di RPC).
+ * Satu pemegang lock Redis mengeksekusi `cut_off_batch()` (idempoten,
+ * fallback Tier 1, audit); yang kalah lock jadi reader (409).
  */
 export async function POST(
-  _req: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id: batchId } = await params;
   if (!isUuid(batchId)) {
-    return NextResponse.json({ error: "Invalid batch id" }, { status: 400 });
+    return apiError("INVALID_BATCH_ID", "Invalid batch id", 400);
   }
 
   const client = await getServerClient();
+
+  let context;
   try {
-    await requireActive(client as unknown as AuthClient);
+    context = await requireRole(client as unknown as AuthClient, [
+      "supplier",
+      "admin",
+    ]);
   } catch (err) {
     return toAuthResponse(err);
   }
 
-  let result;
+  const limited = await enforceRateLimit(request, "admin", context.userId);
+  if (limited) return limited;
+
+  const lock = await acquireCutoffLock(batchId);
+  if (!lock.acquired) {
+    return apiError(
+      "CUTOFF_IN_PROGRESS",
+      "Batch sedang dikunci proses lain. Coba lagi.",
+      409,
+    );
+  }
+
   try {
-    result = await runBatchCutoff(client, batchId, Date.now());
-  } catch {
-    return apiError("CUTOFF_FAILED", "Gagal mengunci harga batch.", 500);
-  }
-
-  if (!result.applied) {
-    if (result.reason === "not_found") {
-      return apiError("BATCH_NOT_FOUND", "Batch tidak ditemukan.", 404);
-    }
-    if (result.reason === "lock_busy") {
-      return apiSuccess(
-        { locked: false, reason: "lock_busy", batch_id: batchId },
-        202,
-      );
-    }
-    return apiSuccess({
-      locked: false,
-      reason: result.reason,
-      batch_id: batchId,
+    const { error } = await client.rpc("cut_off_batch", {
+      p_batch_id: batchId,
+      p_ip_address: null,
+      p_user_agent: null,
     });
-  }
 
-  return apiSuccess({
-    locked: true,
-    batch_id: batchId,
-    total_volume: result.totalVolume,
-    locked_tier: result.tier.tier_number,
-    locked_price: Number(result.tier.price_per_unit),
-    affected: result.affected,
-  });
+    if (error) {
+      if (/already closed|not found/i.test(error.message)) {
+        return apiError("BATCH_ALREADY_CLOSED", error.message, 409);
+      }
+      return apiError("CUTOFF_FAILED", "Gagal mengunci harga batch.", 500);
+    }
+
+    await resetVolumeCounter(batchId);
+    return apiSuccess({ locked: true, batch_id: batchId });
+  } finally {
+    await releaseCutoffLock(batchId, lock.token);
+  }
 }
