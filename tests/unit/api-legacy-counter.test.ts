@@ -75,6 +75,11 @@ describe("legacy register counter alignment (sum quantity, skema main)", () => {
       error: null,
     }));
     const from = vi.fn((table: string) => {
+      if (table === "profiles") {
+        return {
+          select: vi.fn(() => ({ eq: vi.fn(() => ({ single: profileSingle })) })),
+        };
+      }
       if (table === "batches") {
         return {
           select: vi.fn(() => ({
@@ -86,8 +91,8 @@ describe("legacy register counter alignment (sum quantity, skema main)", () => {
                   min_quantity: 1,
                   status: "published",
                   batch_timeline: {
-                    registration_opens_at: "2030-01-01T00:00:00.000Z",
-                    registration_closes_at: "2030-02-01T00:00:00.000Z",
+                    registration_opens_at: "2026-01-01T00:00:00.000Z",
+                    registration_closes_at: "2027-01-01T00:00:00.000Z",
                   },
                 },
                 error: null,
@@ -128,12 +133,16 @@ describe("legacy register counter alignment (sum quantity, skema main)", () => {
     await expect(res.json()).resolves.toMatchObject({
       data: { registration_count: 17 },
     });
-    expect(profileSingle).toBeDefined();
   });
 
   it("rolls back quantity via incrby negatif saat insert gagal", async () => {
-    const { getUser } = mockUmkmAuth();
+    const { getUser, profileSingle } = mockUmkmAuth();
     const from = vi.fn((table: string) => {
+      if (table === "profiles") {
+        return {
+          select: vi.fn(() => ({ eq: vi.fn(() => ({ single: profileSingle })) })),
+        };
+      }
       if (table === "batches") {
         return {
           select: vi.fn(() => ({
@@ -145,8 +154,8 @@ describe("legacy register counter alignment (sum quantity, skema main)", () => {
                   min_quantity: 1,
                   status: "published",
                   batch_timeline: {
-                    registration_opens_at: "2030-01-01T00:00:00.000Z",
-                    registration_closes_at: "2030-02-01T00:00:00.000Z",
+                    registration_opens_at: "2026-01-01T00:00:00.000Z",
+                    registration_closes_at: "2027-01-01T00:00:00.000Z",
                   },
                 },
                 error: null,
@@ -197,8 +206,13 @@ describe("legacy cancel counter alignment (sum quantity, skema main)", () => {
   });
 
   it("releases the exact quantity via incrby negatif, tanpa upsert manual", async () => {
-    const { getUser } = mockUmkmAuth();
+    const { getUser, profileSingle } = mockUmkmAuth();
     const from = vi.fn((table: string) => {
+      if (table === "profiles") {
+        return {
+          select: vi.fn(() => ({ eq: vi.fn(() => ({ single: profileSingle })) })),
+        };
+      }
       if (table === "registrations") {
         return {
           select: vi.fn(() => ({

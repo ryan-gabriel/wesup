@@ -6,7 +6,7 @@ import {
   type AuthClient,
 } from "@/lib/supabase/auth";
 import { isUuid } from "@/lib/admin/validation";
-import { redis } from "@/lib/redis";
+import { adjustVolumeCounter } from "@/lib/orders/registration-counter";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +37,7 @@ export async function POST(
   // Fetch registration
   const { data: registration, error: regError } = await client
     .from("registrations")
-    .select("id, batch_id, umkm_id, status")
+    .select("id, batch_id, umkm_id, status, quantity")
     .eq("id", id)
     .eq("umkm_id", context.userId)
     .single();
@@ -67,17 +67,8 @@ export async function POST(
     );
   }
 
-  // Decrement Redis counter
-  const counterKey = `batch_counter:${registration.batch_id}`;
-  const newCount = await redis.decr(counterKey);
-
-  // Sync counter to persistent table
-  await client
-    .from("registration_counters")
-    .upsert(
-      { batch_id: registration.batch_id, current_count: Math.max(0, newCount) },
-      { onConflict: "batch_id" },
-    );
+  // Release the reserved quantity (skema main: batch:{id}:count)
+  await adjustVolumeCounter(registration.batch_id, -registration.quantity);
 
   return NextResponse.json({
     success: true,

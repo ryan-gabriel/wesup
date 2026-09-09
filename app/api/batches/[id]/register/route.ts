@@ -10,7 +10,7 @@ import { isUuid } from "@/lib/admin/validation";
 import { acquireLock, releaseLock } from "@/app/api/_lib/distributed-lock";
 import { rateLimit } from "@/app/api/_lib/rate-limit";
 import { apiRateLimit } from "@/app/api/_lib/response";
-import { redis } from "@/lib/redis";
+import { adjustVolumeCounter } from "@/lib/orders/registration-counter";
 
 export const dynamic = "force-dynamic";
 
@@ -157,9 +157,9 @@ export async function POST(
       );
     }
 
-    // ──[4] REDIS ATOMIC COUNTER — increment registration count
-    const counterKey = `batch_counter:${batchId}`;
-    const newCount = await redis.incr(counterKey);
+    // ──[4] REDIS ATOMIC COUNTER — reserve quantity (skema main:
+    // batch:{id}:count; mirror DB eksklusif milik cut_off_batch)
+    const newCount = await adjustVolumeCounter(batchId, quantity);
 
     // ──[5] CREATE REGISTRATION ───────────────────────────
     const { data: registration, error: regError } = await client
@@ -184,20 +184,12 @@ export async function POST(
 
     if (regError || !registration) {
       // Rollback counter on failure
-      await redis.decr(counterKey);
+      await adjustVolumeCounter(batchId, -quantity).catch(() => undefined);
       return NextResponse.json(
         { error: "Failed to create registration" },
         { status: 500 },
       );
     }
-
-    // Sync counter to persistent table
-    await client
-      .from("registration_counters")
-      .upsert(
-        { batch_id: batchId, current_count: newCount },
-        { onConflict: "batch_id" },
-      );
 
     return NextResponse.json(
       {
