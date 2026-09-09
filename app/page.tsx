@@ -1,6 +1,6 @@
 import React from "react";
 import Link from "next/link";
-import { ArrowRight, ShoppingBag, ShieldCheck, Truck, Users, TrendingDown } from "lucide-react";
+import { ArrowRight, ShoppingBag, ShieldCheck, Truck, TrendingDown } from "lucide-react";
 
 export const dynamic = "force-dynamic";
 
@@ -18,8 +18,7 @@ export default function Home() {
           </div>
           <nav className="hidden md:flex gap-8">
             <Link href="#features" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Fitur</Link>
-            <Link href="#cara-kerja" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Cara Kerja</Link>
-            <Link href="#tentang-kami" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Tentang Kami</Link>
+            <Link href="/beranda-umkm" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors">Panduan UMKM</Link>
           </nav>
           <div className="flex items-center gap-4">
             <Link href="/login" className="text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors hidden sm:block">Masuk</Link>
@@ -67,7 +66,7 @@ export default function Home() {
                 <ArrowRight className="h-5 w-5" />
               </Link>
               <Link
-                href="/products"
+                href="/beranda-umkm"
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 rounded-xl bg-white px-8 py-4 text-base font-semibold text-slate-900 shadow-sm ring-1 ring-inset ring-slate-200 hover:bg-slate-50 hover:ring-slate-300 transition-all active:scale-[0.98]"
               >
                 Mulai Belanja (UMKM)

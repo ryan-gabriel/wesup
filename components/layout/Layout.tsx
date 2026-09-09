@@ -22,7 +22,7 @@ export function Layout({ children }: LayoutProps) {
         <div className="flex min-h-screen flex-col">
             <NavigationBar />
             {/* pb-16 reserves space for the mobile bottom nav bar */}
-            <main className="flex-1 pb-16 md:pb-0">{children}</main>
+            <main className="flex-1 bg-gradient-to-b from-blue-50 via-slate-50 to-white pb-16 md:pb-0">{children}</main>
             <Footer />
         </div>
     );

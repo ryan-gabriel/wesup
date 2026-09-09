@@ -29,7 +29,7 @@ export default function MarketplaceResults({ items, total, loading, error, hasAc
   } else if (items.length === 0) {
     content = <MarketplaceEmptyState hasActiveFilters={hasActiveFilters} onReset={onReset} />;
   } else {
-    content = <><div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">{items.map((item) => <ProductCard key={item.id} item={item} />)}</div><MarketplacePagination currentPage={currentPage} totalPages={totalPages} disabled={loading} onPageChange={onPageChange} /></>;
+    content = <><div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-6">{items.map((item) => <ProductCard key={item.id} item={item} />)}</div>{totalPages > 1 && <MarketplacePagination currentPage={currentPage} totalPages={totalPages} disabled={loading} onPageChange={onPageChange} />}</>;
   }
-  return <section aria-busy={loading} aria-describedby="marketplace-results-status"><p id="marketplace-results-status" className="sr-only" aria-live="polite">{liveMessage}</p>{content}</section>;
+  return <section aria-label="Hasil Penawaran Marketplace" aria-busy={loading} aria-describedby="marketplace-results-status"><p id="marketplace-results-status" className="sr-only" aria-live="polite">{liveMessage}</p>{content}</section>;
 }

@@ -114,7 +114,7 @@ describe("POST /api/auth/login role-aware contract", () => {
     await expect(res.json()).resolves.toEqual({
       user: { email: "buyer@example.com" },
       profile: { role: "umkm", status: "active", fullName: "Budi UMKM" },
-      redirectTo: "/",
+      redirectTo: "/marketplace",
     });
     expect(auth.signInWithPassword).toHaveBeenCalledWith({
       email: "buyer@example.com",
@@ -257,7 +257,7 @@ describe("POST /api/auth/login role-aware contract", () => {
     await expect(res.json()).resolves.toEqual({
       user: { email: "buyer@example.com" },
       profile: { role: "supplier", status: "active", fullName: "Sari Supplier" },
-      redirectTo: "/",
+      redirectTo: "/supplier",
     });
     expect(supplierMaybeSingle).not.toHaveBeenCalled();
     expect(auth.signOut).not.toHaveBeenCalled();

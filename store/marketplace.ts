@@ -1,6 +1,6 @@
 import { SEARCH_DEFAULT_RADIUS_KM, SEARCH_MAX_RADIUS_KM, SEARCH_MIN_RADIUS_KM } from "@/lib/catalog/categories";
 import type { BatchCategory } from "@/lib/catalog/categories";
-import type { MarketplaceFilterValue, MarketplaceItem, MarketplaceSearchResult } from "@/lib/marketplace/types";
+import type { MarketplaceFilterValue, MarketplaceItem, MarketplaceOrigin, MarketplaceSearchResponse } from "@/lib/marketplace/types";
 import { createStore, type StoreApi } from "zustand/vanilla";
 
 export interface MarketplaceStoreState {
@@ -14,6 +14,7 @@ export interface MarketplaceStoreState {
   isFilterDrawerOpen: boolean;
   drawerFilters: MarketplaceFilterValue;
   items: MarketplaceItem[];
+  origin: MarketplaceOrigin | null;
   total: number;
   totalPages: number;
   loading: boolean;
@@ -36,7 +37,7 @@ export interface MarketplaceStoreState {
   retry(): void;
   beginRequest(): number;
   blockRequest(): void;
-  resolveRequest(requestId: number, result: MarketplaceSearchResult): void;
+  resolveRequest(requestId: number, result: MarketplaceSearchResponse): void;
   rejectRequest(requestId: number, message: string): void;
 }
 
@@ -69,8 +70,9 @@ export function createMarketplaceStore(): MarketplaceStoreApi {
     items: [],
     total: 0,
     totalPages: 0,
-    loading: false,
+    loading: true,
     error: null,
+    origin: null,
     activeRequestId: 0,
     retryRevision: 0,
     setDraftQuery: (value) => set({ draftQuery: value }),
@@ -133,6 +135,7 @@ export function createMarketplaceStore(): MarketplaceStoreApi {
       if (requestId !== get().activeRequestId) return;
       set({
         items: result.items,
+        origin: result.origin,
         currentPage: result.page,
         total: result.total,
         totalPages: result.totalPages,

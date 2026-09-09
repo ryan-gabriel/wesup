@@ -41,6 +41,7 @@ export function filterMarketplaceItems(
       && (criteria.selectedCategories.length === 0 || criteria.selectedCategories.includes(item.category))
       && (criteria.minPrice === null || item.currentTierPrice >= criteria.minPrice)
       && (criteria.maxPrice === null || item.currentTierPrice <= criteria.maxPrice)
+      && item.distanceKm !== null
       && item.distanceKm <= criteria.radiusKm;
   });
 }

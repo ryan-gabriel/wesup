@@ -184,4 +184,26 @@ describe("POST /api/suppliers/batches/[id]/cancel", () => {
     expect(res.status).toBe(500);
     await expect(res.json()).resolves.toEqual({ error: "Internal server error" });
   });
-});
+
+  it("maps an ownership SQLSTATE from cancel_batch to 403", async () => {
+    const { rpc } = mockSupplierClient({});
+    rpc.mockResolvedValue({ data: null, error: { code: "42501", message: "batch access denied" } } as never);
+    const res = await cancelBatch(
+      postJson("/api/suppliers/batches/x/cancel", { reason: "x" }),
+      routeParams(BATCH_ID),
+    );
+    expect(res.status).toBe(403);
+    await expect(res.json()).resolves.toEqual(expect.objectContaining({ code: "SUPPLIER_CATALOG_FORBIDDEN" }));
+  });
+
+  it("authenticates before rejecting malformed cancel input", async () => {
+    mockSupplierClient({ user: null, profile: null });
+    const res = await cancelBatch(postJson("/api/suppliers/batches/x/cancel", { supplierId: "attacker" }), routeParams("not-a-uuid"));
+    expect(res.status).toBe(401);
+  });
+
+  it("rejects a cancel supplierId for an authenticated supplier", async () => {
+    mockSupplierClient({});
+    const res = await cancelBatch(postJson("/api/suppliers/batches/x/cancel", { reason: "x", supplierId: "attacker" }), routeParams(BATCH_ID));
+    expect(res.status).toBe(400);
+  });});

@@ -46,11 +46,20 @@ function IconUser() {
     );
 }
 
+function IconSupplier() {
+    return (
+        <svg className="h-4 w-4 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+        </svg>
+    );
+}
+
 // ── Nav items definition ───────────────────────────────────────────────────
 
 const navItems = [
     { href: "/", label: "Beranda", icon: <IconHome /> },
     { href: "/marketplace", label: "Marketplace", icon: <IconStore /> },
+    { href: "/supplier", label: "Supplier", icon: <IconSupplier /> },
     { href: "/pesanan", label: "Pesanan", icon: <IconClipboard /> },
     { href: "/notifikasi", label: "Notifikasi", icon: <IconBell /> },
     { href: "/akun", label: "Akun", icon: <IconUser /> },
@@ -62,18 +71,18 @@ export function NavigationBar() {
     const pathname = usePathname();
 
     return (
-        <header className="sticky top-0 z-40 w-full border-b border-gray-100 bg-white/95 backdrop-blur-sm">
-            <div className="mx-auto flex h-14 max-w-6xl items-center justify-between px-4 sm:px-6">
+        <header className="sticky top-0 z-40 w-full border-b border-slate-200 bg-white/95 backdrop-blur-sm">
+            <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
                 {/* Brand */}
                 <Link
                     href="/"
-                    className="flex items-center gap-2 text-gray-900 hover:opacity-80 transition-opacity"
+                    className="flex items-center gap-2 text-slate-900 hover:opacity-80 transition-opacity"
                     aria-label="Wesup - Kembali ke Beranda"
                 >
-                    <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-600 text-white text-xs font-bold" aria-hidden="true">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-blue-600 text-white text-sm font-bold shadow-sm shadow-blue-600/20" aria-hidden="true">
                         W
                     </span>
-                    <span className="text-sm font-bold tracking-tight">Wesup</span>
+                    <span className="text-lg font-extrabold tracking-tight">Wesup</span>
                 </Link>
 
                 {/* Desktop nav */}
@@ -90,10 +99,10 @@ export function NavigationBar() {
                                 href={item.href}
                                 aria-current={isActive ? "page" : undefined}
                                 className={cn(
-                                    "flex items-center gap-1.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                                    "flex items-center gap-1.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
                                     isActive
-                                        ? "bg-emerald-50 text-emerald-700"
-                                        : "text-gray-600 hover:bg-gray-100 hover:text-gray-900"
+                                        ? "bg-blue-50 text-blue-700"
+                                        : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                                 )}
                             >
                                 {item.icon}
@@ -104,7 +113,7 @@ export function NavigationBar() {
                 </nav>
 
                 {/* Mobile — bottom bar handled separately, keep header clean */}
-                <div className="flex md:hidden items-center gap-2 text-sm text-gray-400">
+                <div className="flex md:hidden items-center gap-2 text-sm text-slate-400">
                     <span>Menu</span>
                 </div>
             </div>
@@ -119,7 +128,7 @@ function MobileNav({ pathname }: { pathname: string }) {
     return (
         <nav
             aria-label="Navigasi bawah (mobile)"
-            className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden items-center justify-around border-t border-gray-100 bg-white px-2 py-2"
+            className="fixed bottom-0 left-0 right-0 z-40 flex md:hidden items-center justify-around border-t border-slate-200 bg-white px-2 py-2"
         >
             {navItems.map((item) => {
                 const isActive =
@@ -135,12 +144,12 @@ function MobileNav({ pathname }: { pathname: string }) {
                         className={cn(
                             "flex flex-1 flex-col items-center gap-0.5 rounded-md py-1.5 text-[10px] font-medium transition-colors",
                             isActive
-                                ? "text-emerald-700"
-                                : "text-gray-500 hover:text-gray-800"
+                                ? "text-blue-700"
+                                : "text-slate-500 hover:text-slate-800"
                         )}
                     >
                         {/* icon + text always horizontal on desktop, stacked only on mobile bottom bar */}
-                        <span className={cn("flex items-center gap-1", isActive && "text-emerald-700")}>
+                        <span className={cn("flex items-center gap-1", isActive && "text-blue-700")}>
                             {item.icon}
                         </span>
                         <span>{item.label}</span>

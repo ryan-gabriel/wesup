@@ -78,6 +78,12 @@ export const EXPECTED_ENUMS: Record<string, string[]> = {
     "ban_user",
     "unban_user",
     "cancel_batch",
+    "cut_off_batch",
+    "generate_pickup_code",
+    "confirm_pickup",
+    "create_batch",
+    "update_batch",
+    "delete_batch",
   ],
 };
 
@@ -120,7 +126,6 @@ export const EXPECTED_TABLES: Record<string, ExpectedTable> = {
       "address",
       "latitude",
       "longitude",
-      "nik",
       "verification_status",
       "is_location_locked",
       "created_at",
@@ -642,6 +647,14 @@ export const REQUIRED_FUNCTIONS = [
   "publish_batch",
   "handle_batch_cancellation",
   "search_batches",
+  "get_marketplace_batch",
+  "cut_off_batch",
+  "prevent_registration_outside_window",
+  "generate_pickup_code",
+  "confirm_pickup",
+  "create_escrow",
+  "list_batch_orders",
+  "get_supplier_dashboard_summary",
 ];
 
 export const REQUIRED_TRIGGERS = [
@@ -650,6 +663,7 @@ export const REQUIRED_TRIGGERS = [
   { name: "admin_audit_logs_no_truncate", table: "admin_audit_logs" },
   { name: "promote_supplier_on_approval", table: "supplier_profiles" },
   { name: "batches_cancel_side_effects", table: "batches" },
+  { name: "prevent_registration_outside_window", table: "registrations" },
 ];
 
 export const EXPECTED_TABLE_NAMES = Object.keys(EXPECTED_TABLES);

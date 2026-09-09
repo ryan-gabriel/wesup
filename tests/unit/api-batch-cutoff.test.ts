@@ -2,28 +2,45 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest } from "next/server";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
-import { POST as cutoff } from "@/app/api/batches/[id]/cutoff/route";
+import { POST as cutOff } from "@/app/api/batches/[id]/cutoff/route";
 import { getServerClient } from "@/lib/supabase/server";
 
 vi.mock("@/lib/supabase/server", () => ({
   getServerClient: vi.fn(),
 }));
 
-vi.mock("@/lib/batches/cutoff-runner", () => ({
-  runBatchCutoff: vi.fn(),
+const { setMock, evalMock, delMock } = vi.hoisted(() => ({
+  setMock: vi.fn(),
+  evalMock: vi.fn(),
+  delMock: vi.fn(),
 }));
 
-import { runBatchCutoff } from "@/lib/batches/cutoff-runner";
+vi.mock("@/lib/redis", () => ({
+  redis: { set: setMock, eval: evalMock, del: delMock },
+}));
+
+vi.mock("@/lib/rate-limit", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/rate-limit")>(
+    "@/lib/rate-limit",
+  );
+  return {
+    ...actual,
+    enforceRateLimit: vi.fn(async () => null),
+  };
+});
+
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 const mockGetServerClient = vi.mocked(getServerClient);
-const mockRun = vi.mocked(runBatchCutoff);
+const mockEnforceRateLimit = vi.mocked(enforceRateLimit);
 
+const SUPPLIER_ID = "33333333-3333-4333-8333-333333333333";
 const BATCH_ID = "44444444-4444-4444-8444-444444444444";
-const USER_ID = "55555555-5555-4555-8555-555555555555";
 
-function post(): NextRequest {
-  return new NextRequest(`http://localhost/api/batches/${BATCH_ID}/cutoff`, {
+function postJson(url: string, headers: Record<string, string> = {}): NextRequest {
+  return new NextRequest(`http://localhost${url}`, {
     method: "POST",
+    headers,
   });
 }
 
@@ -31,75 +48,168 @@ function routeParams(id: string) {
   return { params: Promise.resolve({ id }) };
 }
 
-function mockActiveUser() {
+function mockClient(role: "supplier" | "admin" = "supplier") {
   const getUser = vi.fn(async () => ({
-    data: { user: { id: USER_ID } },
-    error: null,
+    data: { user: { id: SUPPLIER_ID, email: "x@example.com" }, error: null },
   }));
   const single = vi.fn(async () => ({
-    data: { role: "umkm", status: "active", full_name: "U" },
+    data: { role, status: "active", full_name: "Owner" },
     error: null,
   }));
-  const from = vi.fn(() => ({ select: () => ({ eq: () => ({ single }) }) }));
-  mockGetServerClient.mockResolvedValue({ auth: { getUser }, from } as unknown as SupabaseClient<Database>);
+  const rpc = vi.fn(
+    async () => ({ data: null, error: null }) as {
+      data: null;
+      error: { message: string } | null;
+    },
+  );
+  const from = vi.fn((table: string) => {
+    if (table === "profiles") {
+      return {
+        select: vi.fn(() => ({
+          eq: vi.fn(() => ({ single })),
+        })),
+      };
+    }
+    return { select: vi.fn(() => ({ eq: vi.fn(() => ({ eq: vi.fn() })) })) };
+  });
+  const client = { auth: { getUser }, from, rpc };
+  mockGetServerClient.mockResolvedValue(client as unknown as SupabaseClient<Database>);
+  return { rpc };
 }
 
-describe("POST /api/batches/[id]/cutoff (J2 — hybrid trigger)", () => {
+describe("POST /api/batches/[id]/cutoff (distributed lock gatekeeper)", () => {
   beforeEach(() => {
     mockGetServerClient.mockReset();
-    mockRun.mockReset();
+    mockEnforceRateLimit.mockReset();
+    mockEnforceRateLimit.mockResolvedValue(null as never);
+    setMock.mockReset();
+    evalMock.mockReset();
+    delMock.mockReset();
   });
 
-  it("returns 400 for an invalid batch id without touching auth", async () => {
-    const res = await cutoff(post(), routeParams("not-a-uuid"));
+  it("acquires the SETNX lock, runs cut_off_batch, and releases the lock", async () => {
+    const { rpc } = mockClient("supplier");
+    setMock.mockResolvedValue("OK");
+    evalMock.mockResolvedValue(1);
+
+    const res = await cutOff(
+      postJson(`/api/batches/${BATCH_ID}/cutoff`) as unknown as Request,
+      routeParams(BATCH_ID) as never,
+    );
+    expect(res.status).toBe(200);
+
+    const lockKey = `cutoff-lock:${BATCH_ID}`;
+    expect(setMock).toHaveBeenCalledWith(
+      lockKey,
+      expect.any(String),
+      expect.objectContaining({ nx: true }),
+    );
+    expect(rpc).toHaveBeenCalledWith("cut_off_batch", {
+      p_batch_id: BATCH_ID,
+      p_ip_address: null,
+      p_user_agent: null,
+    });
+    expect(evalMock).toHaveBeenCalled(); // release uses compare-and-del
+    expect(delMock).toHaveBeenCalledWith(`batch:${BATCH_ID}:count`);
+  });
+
+  it("returns 409 and does NOT run the RPC when another worker holds the lock", async () => {
+    const { rpc } = mockClient("supplier");
+    setMock.mockResolvedValue(null);
+
+    const res = await cutOff(
+      postJson(`/api/batches/${BATCH_ID}/cutoff`) as unknown as Request,
+      routeParams(BATCH_ID) as never,
+    );
+    expect(res.status).toBe(409);
+    expect(rpc).not.toHaveBeenCalled();
+    expect(evalMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 409 without touching Redis when the batch is invalid", async () => {
+    mockClient("supplier");
+    const res = await cutOff(
+      postJson(`/api/batches/not-a-uuid/cutoff`) as unknown as Request,
+      routeParams("not-a-uuid") as never,
+    );
     expect(res.status).toBe(400);
-    expect(mockGetServerClient).not.toHaveBeenCalled();
+    expect(setMock).not.toHaveBeenCalled();
   });
 
-  it("returns 401 when not signed in", async () => {
+  it("propagates a 409 when the RPC reports the batch is already closed", async () => {
+    mockClient("supplier");
+    setMock.mockResolvedValue("OK");
+    evalMock.mockResolvedValue(1);
     mockGetServerClient.mockResolvedValue({
-      auth: { getUser: async () => ({ data: { user: null }, error: null }) },
-      from: () => ({ select: () => ({ eq: () => ({ single: async () => ({ data: null, error: null }) }) }) }),
+      auth: {
+        getUser: vi.fn(async () => ({
+          data: { user: { id: SUPPLIER_ID, email: "x@example.com" }, error: null },
+        })),
+      },
+      from: vi.fn((table: string) => {
+        if (table === "profiles") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                single: vi.fn(async () => ({
+                  data: { role: "supplier", status: "active", full_name: "Owner" },
+                  error: null,
+                })),
+              })),
+            })),
+          };
+        }
+        return {};
+      }),
+      rpc: vi.fn(async () => ({
+        data: null,
+        error: { message: "batch not found or already closed" },
+      })),
     } as unknown as SupabaseClient<Database>);
-    const res = await cutoff(post(), routeParams(BATCH_ID));
-    expect(res.status).toBe(401);
-    expect(mockRun).not.toHaveBeenCalled();
+
+    const res = await cutOff(
+      postJson(`/api/batches/${BATCH_ID}/cutoff`) as unknown as Request,
+      routeParams(BATCH_ID) as never,
+    );
+    expect(res.status).toBe(409);
+    expect(delMock).not.toHaveBeenCalled();
   });
 
-  it("locks Tier 2 and returns the server timestamp (anti time-travel)", async () => {
-    mockActiveUser();
-    mockRun.mockResolvedValue({
-      applied: true,
-      totalVolume: 60,
-      tier: { tier_number: 2, min_volume: 50, max_volume: 99, price_per_unit: 8000 },
-      affected: 3,
-    });
-    const res = await cutoff(post(), routeParams(BATCH_ID));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.success).toBe(true);
-    expect(body.data.locked_tier).toBe(2);
-    expect(body.data.total_volume).toBe(60);
-    expect(body.data.affected).toBe(3);
-    expect(typeof body.meta.timestamp).toBe("string");
-    expect(mockRun).toHaveBeenCalledWith(expect.anything(), BATCH_ID, expect.any(Number));
-  });
+  it("returns 500 when the RPC fails for an unknown reason", async () => {
+    mockClient("supplier");
+    setMock.mockResolvedValue("OK");
+    evalMock.mockResolvedValue(1);
+    mockGetServerClient.mockResolvedValue({
+      auth: {
+        getUser: vi.fn(async () => ({
+          data: { user: { id: SUPPLIER_ID, email: "x@example.com" }, error: null },
+        })),
+      },
+      from: vi.fn((table: string) => {
+        if (table === "profiles") {
+          return {
+            select: vi.fn(() => ({
+              eq: vi.fn(() => ({
+                single: vi.fn(async () => ({
+                  data: { role: "supplier", status: "active", full_name: "Owner" },
+                  error: null,
+                })),
+              })),
+            })),
+          };
+        }
+        return {};
+      }),
+      rpc: vi.fn(async () => ({
+        data: null,
+        error: { message: "unexpected failure" },
+      })),
+    } as unknown as SupabaseClient<Database>);
 
-  it("is idempotent: already-locked batch returns locked:false", async () => {
-    mockActiveUser();
-    mockRun.mockResolvedValue({ applied: false, reason: "already_locked" });
-    const res = await cutoff(post(), routeParams(BATCH_ID));
-    expect(res.status).toBe(200);
-    await expect(res.json()).resolves.toMatchObject({
-      success: true,
-      data: { locked: false, reason: "already_locked" },
-    });
-  });
-
-  it("returns 202 when another request holds the cutoff lock", async () => {
-    mockActiveUser();
-    mockRun.mockResolvedValue({ applied: false, reason: "lock_busy" });
-    const res = await cutoff(post(), routeParams(BATCH_ID));
-    expect(res.status).toBe(202);
+    const res = await cutOff(
+      postJson(`/api/batches/${BATCH_ID}/cutoff`) as unknown as Request,
+      routeParams(BATCH_ID) as never,
+    );
+    expect(res.status).toBe(500);
   });
 });

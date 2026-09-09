@@ -12,6 +12,8 @@ export interface BusinessPhotoFieldProps {
   onChange: (file: File | null) => void;
   error?: string;
   disabled?: boolean;
+  variant?: "business" | "product";
+  existingUrl?: string | null;
 }
 
 export function formatFileSize(bytes: number): string {
@@ -22,7 +24,7 @@ export function formatFileSize(bytes: number): string {
 
 export function formatSavings(originalSize: number, compressedSize: number): string {
   if (originalSize <= 0 || compressedSize >= originalSize) return "";
-  return `Foto berhasil diunggah`;
+  return "Foto berhasil diunggah";
 }
 
 export default function BusinessPhotoField({
@@ -30,6 +32,8 @@ export default function BusinessPhotoField({
   onChange,
   error,
   disabled = false,
+  variant = "business",
+  existingUrl = null,
 }: BusinessPhotoFieldProps) {
   const inputRef = useRef<HTMLInputElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -38,7 +42,14 @@ export default function BusinessPhotoField({
   const [errorMessage, setErrorMessage] = useState<string | undefined>(error);
   const [originalSize, setOriginalSize] = useState<number | null>(null);
   const [compressedSize, setCompressedSize] = useState<number | null>(value?.size ?? null);
-const [dragActive, setDragActive] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
+  const isProduct = variant === "product";
+  const uploadLabel = isProduct ? "Unggah foto produk" : "Unggah foto usaha";
+  const uploadHint = isProduct
+    ? "Foto produk diproses menjadi WebP secara otomatis"
+    : "Foto diproses menjadi WebP secara otomatis";
+  const previewAlt = isProduct ? "Pratinjau foto produk" : "Pratinjau foto tempat usaha";
+  const errorId = isProduct ? "product-photo-error" : "business-photo-error";
 
   const previewUrl = useMemo(() => (value ? URL.createObjectURL(value) : null), [value]);
 
@@ -48,7 +59,7 @@ const [dragActive, setDragActive] = useState(false);
     };
   }, [previewUrl]);
 
-useEffect(() => {
+  useEffect(() => {
     return () => abortRef.current?.abort();
   }, []);
 
@@ -79,7 +90,7 @@ useEffect(() => {
         signal: controller.signal,
       });
       if (requestId !== requestRef.current || controller.signal.aborted) return;
-      const baseName = rawFile.name.replace(/\.[^.]+$/, "") || "business-photo";
+      const baseName = rawFile.name.replace(/\.[^.]+$/, "") || (isProduct ? "product-photo" : "business-photo");
       const compressed = new File([result.blob], `${baseName}.webp`, { type: "image/webp" });
       onChange(compressed);
       setCompressedSize(compressed.size);
@@ -107,7 +118,7 @@ useEffect(() => {
     if (inputRef.current) inputRef.current.value = "";
   }
 
-  const describedBy = error || errorMessage ? "business-photo-error" : undefined;
+  const describedBy = error || errorMessage ? errorId : undefined;
 
   return (
     <div>
@@ -123,6 +134,14 @@ useEffect(() => {
         disabled={disabled || status === "compressing"}
         aria-describedby={describedBy}
       />
+
+      {!value && existingUrl && status !== "compressing" && (
+        <div className="mb-3 flex items-center gap-3 rounded-2xl border border-slate-200 bg-white p-3">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={existingUrl} alt={previewAlt} className="h-20 w-20 rounded-xl object-cover" />
+          <p className="text-sm text-slate-600">Foto saat ini tersimpan. Unggah foto baru untuk menggantinya.</p>
+        </div>
+      )}
 
       {!value && status !== "compressing" ? (
         <button
@@ -145,9 +164,9 @@ useEffect(() => {
           } disabled:cursor-not-allowed disabled:opacity-60`}
         >
           <UploadCloud className="h-11 w-11 text-blue-500" aria-hidden="true" />
-          <span className="mt-3 text-sm font-semibold text-blue-700">Unggah foto usaha</span>
+          <span className="mt-3 text-sm font-semibold text-blue-700">{uploadLabel}</span>
           <span className="mt-1 text-xs text-slate-500">JPEG, PNG, atau WebP · maksimal 10 MB</span>
-          <span className="mt-1 text-xs text-slate-500">Foto diproses menjadi WebP secara otomatis</span>
+          <span className="mt-1 text-xs text-slate-500">{uploadHint}</span>
         </button>
       ) : status === "compressing" ? (
         <div className="flex items-center gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-6 text-sm font-medium text-blue-800" role="status" aria-live="polite">
@@ -158,7 +177,7 @@ useEffect(() => {
         <div className="grid gap-4 rounded-2xl border border-slate-200 bg-white p-4 sm:grid-cols-[128px_1fr_auto] sm:items-center">
           {previewUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={previewUrl} alt="Pratinjau foto tempat usaha" className="h-28 w-32 rounded-xl object-cover" />
+            <img src={previewUrl} alt={previewAlt} className="h-28 w-32 rounded-xl object-cover" />
           ) : (
             <div className="flex h-28 w-32 items-center justify-center rounded-xl bg-slate-100"><ImageIcon className="h-8 w-8 text-slate-400" /></div>
           )}
@@ -174,7 +193,7 @@ useEffect(() => {
       ) : null}
 
       {(error || errorMessage) && (
-        <p id="business-photo-error" className="mt-2 text-sm font-medium text-red-600" role="alert">
+        <p id={errorId} className="mt-2 text-sm font-medium text-red-600" role="alert">
           {error || errorMessage}
         </p>
       )}

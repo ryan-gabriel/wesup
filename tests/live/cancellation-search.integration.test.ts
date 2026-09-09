@@ -51,6 +51,12 @@ async function createUser(fullName: string, role: "supplier" | "umkm") {
 // admin_audit_logs is append-only and references profiles, so fixture
 // users can never be deleted once they appear in an audit row. Reuse
 // them instead.
+async function ensureApprovedSupplierProfile(userId: string, fullName: string) {
+  await sql(
+    "insert into public.supplier_profiles\n       (user_id, business_name, address, latitude, longitude, ktp_photo_url, nik, verification_status)\n     values ($1, $2, 'Jl. Test No. 1', -6.914744, 107.60981, 'fixture', $3, 'approved')\n     on conflict (user_id) do update set verification_status = 'approved', business_name = excluded.business_name",
+    [userId, fullName, `FX-${fullName.replace(/\s+/g, "-").toLowerCase()}-nik`],
+  );
+}
 async function ensureUser(
   fullName: string,
   role: "supplier" | "umkm",
@@ -65,9 +71,12 @@ async function ensureUser(
       existing[0].id,
       role,
     ]);
+    if (role === "supplier") await ensureApprovedSupplierProfile(existing[0].id, fullName);
     return existing[0].id;
   }
-  return createUser(fullName, role);
+  const id = await createUser(fullName, role);
+  if (role === "supplier") await ensureApprovedSupplierProfile(id, fullName);
+  return id;
 }
 
 async function createBatch(
@@ -81,8 +90,8 @@ async function createBatch(
   const [batch] = await sql<{ id: string }>(
     `insert into public.batches
        (supplier_id, title, description, category, min_quantity,
-        pickup_address, latitude, longitude, status)
-     values ($1, $2, 'deskripsi', $3, 10, 'Jl. Test No. 1', $4, $5, $6)
+        pickup_name, pickup_address, latitude, longitude, status)
+     values ($1, $2, 'deskripsi', $3, 10, 'Pickup Test', 'Jl. Test No. 1', $4, $5, $6)
      returning id`,
     [supplier, title, category, lat, lng, status],
   );
@@ -108,15 +117,30 @@ async function createRegistration(
   status: "registered" | "paid" | "pending_payment",
   finalAmount?: number,
 ): Promise<string> {
-  const [reg] = await sql<{ id: string }>(
-    `insert into public.registrations
-       (batch_id, umkm_id, quantity, consented_at, status, locked_tier_number,
-        locked_price_per_unit, final_amount)
-     values ($1, $2, 25, now(), $3, 1, 25000, $4)
-     returning id`,
-    [batchId, umkmId, status, finalAmount ?? null],
-  );
-  return reg.id;
+  // Fixtures model historical batches whose registration window has
+  // already closed (pre-registration-gatekeeper data). Bypass triggers
+  // and FK checks for the fixture insert only.
+  const client = await pool!.connect();
+  try {
+    await client.query("begin");
+    await client.query("set session_replication_role = replica");
+    const res = await client.query<{ id: string }>(
+      `insert into public.registrations
+         (batch_id, umkm_id, quantity, consented_at, status, locked_tier_number,
+          locked_price_per_unit, final_amount)
+       values ($1, $2, 25, now(), $3, 1, 25000, $4)
+       returning id`,
+      [batchId, umkmId, status, finalAmount ?? null],
+    );
+    await client.query("set session_replication_role = default");
+    await client.query("commit");
+    return res.rows[0].id;
+  } catch (err) {
+    await client.query("rollback").catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 async function actAs(userId: string, fn: () => Promise<void>) {
@@ -270,7 +294,7 @@ describe.skipIf(noDbUrl)("live batch cancellation & search (pg)", () => {
     await actAs(umkmAId, async () => {
       await expect(
         sql(`select public.cancel_batch($1, 'bukan milikku')`, [cancelBatchId]),
-      ).rejects.toThrow(/not found or not cancellable/i);
+      ).rejects.toThrow(/batch access denied/i);
     });
   });
 

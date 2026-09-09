@@ -27,7 +27,7 @@ interface RefundsQuery {
   ) => {
     range: (from: number, to: number) => PromiseLike<{
       data: unknown[] | null;
-      error: Error | null;
+      error: Error | { message: string } | null;
     }>;
   };
 }
@@ -80,7 +80,7 @@ export async function GET(req: Request) {
   const { data, error } = await query
     .order("requested_at", { ascending: false })
     .range(offset, offset + limit - 1);
-  if (error) {
+  if (error && typeof error === "object" && "message" in error) {
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 

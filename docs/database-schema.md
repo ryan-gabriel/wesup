@@ -12,14 +12,17 @@ Defined in migration `20260731000100_core_types_profiles.sql`. Every status colu
 | `account_status` | `active`, `suspended_temporary`, `suspended_permanent`, `banned` | `profiles.status` |
 | `verification_status` | `pending`, `approved`, `rejected` | `supplier_profiles` |
 | `batch_status` | `draft`, `published`, `closed`, `cancelled`, `takedown`, `completed` | `batches.status` |
-| `registration_status` | `registered` → `pending_payment` → `paid` → `picked_up` → `completed` / `no_show` / `cancelled` / `refund_pending` / `refunded` | `registrations.status` |
+| `registration_status` | `registered` → `pending_payment` → `paid` → `picked_up` → `completed` / 
+o_show` / `cancelled` / `refund_pending` / `refunded` | `registrations.status` |
 | `payment_status` | `pending`, `paid`, `expired`, `failed`, `refunded` | `payments.status` |
 | `escrow_status` | `held`, `released`, `refunded`, `forfeited` | `escrow_holds.status` |
 | `dispute_status` | `pending`, `under_review`, `resolved_supplier`, `resolved_umkm` | `disputes.status` |
 | `refund_trigger` | `takedown`, `force_majeure`, `dispute_won` | `refund_requests.trigger_type` |
 | `refund_status` | `pending`, `waiting_bank_account`, `processing`, `completed`, `failed` | `refund_requests.status` |
-| `notification_type` | `payment_due`, `payment_success`, `pickup_ready`, `dispute`, `refund`, `suspension`, `referral`, `batch_update` | `notifications.type` |
-| `audit_action` | `verify_supplier`, `reject_supplier`, `takedown_batch`, `resolve_dispute`, `approve_refund`, `complete_refund`, `suspend_user`, `ban_user`, `unban_user` | `admin_audit_logs.action_type` |
+| 
+otification_type` | `payment_due`, `payment_success`, `pickup_ready`, `dispute`, `refund`, `suspension`, `referral`, `batch_update` | 
+otifications.type` |
+| `audit_action` | `verify_supplier`, `reject_supplier`, `takedown_batch`, `resolve_dispute`, `approve_refund`, `complete_refund`, `suspend_user`, `ban_user`, `unban_user`, `cancel_batch`, `cut_off_batch`, `generate_pickup_code`, `confirm_pickup` | `admin_audit_logs.action_type` |
 
 ## 2. Tables by Module
 
@@ -41,7 +44,8 @@ RLS: user sees only own row; admin sees all (`is_admin()` helper).
 
 - `ktp_photo_url text` → points to `wesup-assets/ktp/{user_id}/{file}`
 - `business_photo_url text` → points to `wesup-assets/business/{user_id}/{file}`
-- `nik` unique (global NIK duplication check), `verification_status`, `verified_by/at`, `is_location_locked`
+- 
+ik` unique (global NIK duplication check), `verification_status`, `verified_by/at`, `is_location_locked`
 
 **`supplier_bank_accounts`** / **`umkm_bank_accounts`** — disbursement (supplier payout) and refund destinations (UMKM). 1:N with profiles.
 
@@ -49,19 +53,24 @@ RLS: user sees only own row; admin sees all (`is_admin()` helper).
 
 ### Module 2 — Catalog & Campaign (migration 0002)
 
-**`recurring_configs`** — auto-repost schedule (e.g. every Mon & Thu): `interval_days`, `days_of_week`, `next_generation_at`.
+**`recurring_configs`** — auto-repost schedule (e.g. every Mon & Thu): `interval_days`, `days_of_week`, 
+ext_generation_at`.
 
 **`batches`** — the core offer entity. The central node of the commerce graph:
 
 - `supplier_id → profiles(id)`
 - `recurring_config_id → recurring_configs(id)`
 - `product_photo_url text` → points to **`wesup-public/products/{batch_id}/{file}`**
+- `pickup_name text` → human-readable pickup point label; backfilled from `pickup_address` for existing rows
 - `latitude/longitude` (Bandung-bounded pin), `status`, takedown fields
 
 **`batch_tiers`** — N:M via `batch_id`. Volume-based discount levels (Tier 1 = base price). `unique(batch_id, tier_number)`; cross-tier rules (decreasing price, non-overlapping volume) enforced at the API layer (PRD 3.6).
 
 **`batch_timeline`** — 1:1 with batches (`batch_id` PK). The absolute timestamps: `registration_opens < registration_closes < payment_opens < payment_closes < estimated_ready`. The DB check constraint `batch_timeline_linear_order` rejects time-travel at the schema level.
 
+### Supplier Catalog Persistence (migration 0019)
+
+Supplier catalog create/edit/list/detail flows use the security-definer RPC contract in `20260909000000_supplier_catalog_persistence.sql`: `create_supplier_batch`, `publish_supplier_batch`, `update_supplier_batch`, `delete_supplier_batch`, `get_supplier_batch`, and `list_supplier_batches`. The functions require an active, Admin-approved supplier, enforce at least two ordered decreasing-price tiers, future linear timestamps, positive `min_quantity`, and a 50 km Bandung radius. Tier/location fields lock after the first registration; timeline edits lock once registration opens. Draft deletion is allowed only when no registrations exist. Marketplace read RPCs continue to filter strictly to `published` batches.
 ### Module 3 & 4 — Orders (migration 0003)
 
 **`registrations`** — the UMKM↔batch join record. The transactional spine:
@@ -120,13 +129,15 @@ RLS: user sees only own row; admin sees all (`is_admin()` helper).
 
 ### Module 9 & 10 — Notifications & Audit (migration 0008)
 
-**`notifications`** — in-app center (WhatsApp fallback): `type`, `title`, `message`, `data jsonb`, `read_at`, `sent_via_whatsapp`.
+**
+otifications`** — in-app center (WhatsApp fallback): `type`, `title`, `message`, `data jsonb`, `read_at`, `sent_via_whatsapp`.
 
 **`admin_audit_logs`** — append-only (triggers block UPDATE/DELETE/TRUNCATE): `action_type`, `target_type/id`, `details jsonb`, `ip_address`, `user_agent`. Written exclusively by the server-side `write_audit_log()` security-definer function (no client INSERT policy — dropped in migration 0009), which asserts the caller is an admin and the admin id matches `auth.uid()`.
 
 ### Module 11 — Admin Action RPCs (migration 0009)
 
-Admin actions are executed through **security-definer SQL functions** (`app/api/admin/*` routes call them via `.rpc()`). Each function performs the state transition and appends an `admin_audit_logs` row **in the same transaction**, so an action is never recorded unless it succeeded. All functions assert `public.is_admin()` and validate inputs; timestamps are set server-side with `now()` (audit records cannot be backdated by the client) — the one exception is `suspend_user`, whose `suspended_until` is a client-supplied absolute timestamp validated by the API Gatekeeper (`isIsoTimestamp` + future check in the function).
+Admin actions are executed through **security-definer SQL functions** (`app/api/admin/*` routes call them via `.rpc()`). Each function performs the state transition and appends an `admin_audit_logs` row **in the same transaction**, so an action is never recorded unless it succeeded. All functions assert `public.is_admin()` and validate inputs; timestamps are set server-side with 
+ow()` (audit records cannot be backdated by the client) — the one exception is `suspend_user`, whose `suspended_until` is a client-supplied absolute timestamp validated by the API Gatekeeper (`isIsoTimestamp` + future check in the function).
 
 | Function | Effect | Audit action |
 |---|---|---|
@@ -140,6 +151,23 @@ Admin actions are executed through **security-definer SQL functions** (`app/api/
 | `ban_user(p_user_id, ...)` | `profiles.status → 'banned'` | `ban_user` |
 | `unban_user(p_user_id, ...)` | `profiles.status → 'active'` (only from banned) | `unban_user` |
 | `write_audit_log(...)` | appends a row (no state change) | as supplied |
+
+### Module 15 — Order Atomic Counter & Cutoff Gatekeeper (migration 0015)
+
+Implements the PRD 3.1/3.2 order-processing spine without any cron (Lazy Evaluation):
+
+- **`POST /api/registrations`** — UMKM "Daftar" click. API Gatekeeper validates absolute timestamps (`opens ≤ now < closes`) and forces `batches.status = 'published'`; rejects before open / at-after cutoff / non-published with `403`. Input validation requires a **safe integer** quantity (`Number.isSafeInteger`); oversized/invalid values return `400` before any Redis write. Duplicate registrations (unique `(batch_id, umkm_id)`) are detected via PostgreSQL code `23505` (message `/duplicate/i` fallback) and roll the Redis `INCR` back with `decr` → `409`. On a valid request it runs `redis.INCR(batch:<id>:count)` (atomic), mirrors the count into `registration_counters`, and inserts the `registrations` row with server-generate `consented_at`. Per-UMKM rate limiting via the `registration` scope (fail-open).
+- **`POST /api/batches/[id]/cutoff`** — Volume-Limiting Gatekeeper. Wrapped in a Redis **distributed lock** (`SETNX` on `cutoff-lock:<id>` with an owner token, ~30s TTL, released only by the owner via a Lua compare-and-delete). Concurrent requests that fail to acquire the lock become readers (`409`). The single acquirer calls `cut_off_batch(...)`.
+- **`cut_off_batch(p_batch_id, p_ip, p_user_agent)`** — security-definer, idempotent (only closes batches still `published`), callable by the owning supplier or an admin. Reconciles committed volume from `registrations`, persists `registration_counters`, selects the qualifying tier (falling back to Tier 1 base price when the minimum threshold is unmet), locks `locked_tier_number` / `locked_price_per_unit` / `final_amount` onto every live registration, then flips `batches.status → 'closed'`. **Overflow guard:** `final_amount = round(least(price * quantity, 9999999999.99), 2)` so one oversized order cannot fail the whole cutoff (
+umeric(12,2)` overflow). Appends an audit row (`cut_off_batch`).
+
+### Module 15.1 — Registration Integrity Gatekeeper (migration 0016)
+
+Database-boundary backstop for the registration/cutoff race (TOCTOU), applied lazily — no cron:
+
+- **`prevent_registration_outside_window()`** — `security definer`, `set search_path = ''`, `BEFORE INSERT` trigger on `registrations`. Reads `batches.status` and the `batch_timeline` window schema-qualified and `raise exception` unless the batch is `published` and 
+ow()` is within `[registration_opens_at, registration_closes_at)`. Both the gate check and the insert run in the same transaction, so a registration can never slip in after a concurrent `cut_off_batch()` has closed the batch. Function EXECUTE revoked from `public`/`anon`/`authenticated` (not invokable standalone).
+- **`registrations_umkm_all`** policy dropped & recreated with an explicit **`WITH CHECK (umkm_id = auth.uid())`** (inserts/updates/deletes only by the owning UMKM).
 
 Grant model: EXECUTE on all of the above is revoked from `public`/`anon` and granted only to `authenticated`; `write_audit_log` additionally requires the caller to be an admin. `admin_audit_logs` keeps FORCE RLS with client access read-only (SELECT for admins); the INSERT policy was dropped so client-side rows cannot be forged.
 
@@ -262,7 +290,7 @@ Objects are never hard-deleted with their rows. The app moves a file to `archive
    });
    ```
 
-3. At cutoff, backend locks `locked_tier_number`, `locked_price_per_unit`, `final_amount` (under Redis SETNX distributed lock) and updates the row.
+3. At cutoff, the Volume-Limiting Gatekeeper runs `POST /api/batches/[id]/cutoff`. Under a Redis `SETNX` distributed lock (`cutoff-lock:<id>`, owner token + TTL, compare-and-delete release) the single acquirer calls `cut_off_batch(...)`, which reconciles volume from `registrations`, persists `registration_counters`, locks `locked_tier_number` / `locked_price_per_unit` / `final_amount` (falling back to Tier 1 base price), and flips `batches.status → 'closed'`. Concurrent requests that lose the lock become readers (`409`).
 
 ### Example D — Payment webhook (backend ← Midtrans)
 
@@ -299,4 +327,5 @@ Objects are never hard-deleted with their rows. The app moves a file to `archive
 6. **Path-embedded record ids** — storage paths encode the owning record UUID so storage policies can validate ownership against the related table.
 ## Supplier registration flow (initial onboarding)
 
-The `/supplier/register` flow creates a Supabase Auth user with the forced initial role `umkm`, uploads the client-compressed business photo to the private `wesup-assets` bucket at `business/<user_id>/<uuid>.webp`, and inserts `supplier_profiles` with `verification_status = 'pending'`. `business_photo_url` stores the private object path. `nik` and `ktp_photo_url` are nullable during initial onboarding and are completed during the Admin KYC step. Email availability and the final duplicate check retrieve the normalized email directly from `public.profiles` using the server-only service-role client; database uniqueness and Supabase Auth remain the final race-condition safeguards.
+The `/supplier/register` flow creates a Supabase Auth user with the forced initial role `umkm`, uploads the client-compressed business photo to the private `wesup-assets` bucket at `business/<user_id>/<uuid>.webp`, and inserts `supplier_profiles` with `verification_status = 'pending'`. `business_photo_url` stores the private object path. 
+ik` and `ktp_photo_url` are nullable during initial onboarding and are completed during the Admin KYC step. Email availability and the final duplicate check retrieve the normalized email directly from `public.profiles` using the server-only service-role client; database uniqueness and Supabase Auth remain the final race-condition safeguards.

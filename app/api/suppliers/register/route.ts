@@ -3,6 +3,7 @@ import { parseSupplierRegistrationFormData } from "@/lib/supplier-registration/c
 import { consumeSupplierRegistrationLimit } from "@/lib/supplier-registration/rate-limit";
 import {
   isDuplicateSupplierEmailError,
+  isSupplierConfigurationError,
   isSupplierEmailRateLimitError,
   registerSupplier,
   SupplierRegistrationError,
@@ -50,8 +51,31 @@ export async function POST(request: Request) {
       );
     }
     if (error instanceof SupplierRegistrationError) {
-      return NextResponse.json({ error: "Pendaftaran belum dapat diproses. Coba lagi." }, { status: 500 });
+      console.error("[suppliers/register] registration failed", {
+        stage: error.stage,
+        message: error.message,
+      });
+      if (isSupplierConfigurationError(error)) {
+        return NextResponse.json(
+          {
+            error: "Pendaftaran sedang mengalami kendala konfigurasi. Coba lagi nanti.",
+            code: "SUPPLIER_REGISTRATION_NOT_CONFIGURED",
+          },
+          { status: 503 },
+        );
+      }
+      return NextResponse.json(
+        { error: "Pendaftaran belum dapat diproses. Coba lagi.", code: "SUPPLIER_REGISTRATION_FAILED" },
+        { status: 500 },
+      );
     }
-    return NextResponse.json({ error: "Pendaftaran belum dapat diproses. Coba lagi." }, { status: 500 });
+    const unexpected = error instanceof Error
+      ? { name: error.name, message: error.message }
+      : { name: "UnknownError", message: String(error) };
+    console.error("[suppliers/register] unexpected error", unexpected);
+    return NextResponse.json(
+      { error: "Pendaftaran belum dapat diproses. Coba lagi.", code: "SUPPLIER_REGISTRATION_FAILED" },
+      { status: 500 },
+    );
   }
 }

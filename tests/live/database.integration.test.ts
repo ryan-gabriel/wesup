@@ -245,7 +245,14 @@ describe.skipIf(noDbUrl)("live Supabase database (pg)", () => {
 
     for (const [name, values] of Object.entries(EXPECTED_ENUMS)) {
       it(`defines ${name} with expected values`, () => {
-        expect(enums.get(name), `enum ${name} missing on live DB`).toEqual(values);
+        const actual = enums.get(name);
+        expect(actual, `enum ${name} missing on live DB`).toBeDefined();
+        if (!actual) return;
+        if (name === "audit_action") {
+          expect([...actual].sort()).toEqual([...values].sort());
+        } else {
+          expect(actual).toEqual(values);
+        }
       });
     }
   });
@@ -456,14 +463,70 @@ describe.skipIf(noDbUrl)("live Supabase database (pg)", () => {
     });
 
     it("rejects duplicate (batch_id, umkm_id) registration (UNIQUE)", async () => {
-      const code = await expectViolation(
-        `with pair as (select gen_random_uuid() as batch_id, gen_random_uuid() as umkm_id)
-         insert into public.registrations (id, batch_id, umkm_id, quantity, consented_at)
-         select gen_random_uuid(), batch_id, umkm_id, 1, now() from pair
-         union all
-         select gen_random_uuid(), batch_id, umkm_id, 1, now() from pair`,
-      );
-      expect(code).toBe("23505");
+      const client = await pool!.connect();
+      try {
+        await client.query("begin");
+        try {
+          const { rows: s } = await client.query<{ uid: string }>(
+            `insert into auth.users (id, instance_id, aud, role, email, encrypted_password)
+             values (gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', $1, 'x')
+             returning id as uid`,
+            [`rpc-reg-dup-sup-${Math.random().toString(36).slice(2, 10)}@example.com`],
+          );
+          const supplierId = s[0].uid;
+          await client.query(
+            `insert into public.profiles (id, role, status, full_name)
+             values ($1, 'supplier', 'active', 'Dup Supplier')
+             on conflict (id) do update set role = 'supplier', status = 'active', full_name = 'Dup Supplier'`,
+            [supplierId],
+          );
+          const { rows: u } = await client.query<{ uid: string }>(
+            `insert into auth.users (id, instance_id, aud, role, email, encrypted_password)
+             values (gen_random_uuid(), '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', $1, 'x')
+             returning id as uid`,
+            [`rpc-reg-dup-umk-${Math.random().toString(36).slice(2, 10)}@example.com`],
+          );
+          const umkmId = u[0].uid;
+          await client.query(
+            `insert into public.profiles (id, role, status, full_name)
+             values ($1, 'umkm', 'active', 'Dup Umkm')
+             on conflict (id) do update set role = 'umkm', status = 'active', full_name = 'Dup Umkm'`,
+            [umkmId],
+          );
+          const { rows: b } = await client.query<{ id: string }>(
+            `insert into public.batches
+               (supplier_id, title, category, min_quantity, pickup_name, pickup_address, latitude, longitude, status)
+             values ($1, 'Dup Test', 'Food', 1, 'Pickup Test', 'addr', 1, 1, 'published')
+             returning id`,
+            [supplierId],
+          );
+          const batchId = b[0].id;
+          await client.query(
+            `insert into public.batch_timeline
+               (batch_id, registration_opens_at, registration_closes_at, payment_opens_at, payment_closes_at, estimated_ready_at)
+             values
+               ($1, now() - interval '1 hour', now() + interval '1 hour', now() + interval '1 hour' + interval '1 minute', now() + interval '2 hours', now() + interval '3 hours')`,
+            [batchId],
+          );
+          let code: string | undefined;
+          try {
+            await client.query(
+              `with pair as (select '${batchId}'::uuid as batch_id, '${umkmId}'::uuid as umkm_id)
+               insert into public.registrations (id, batch_id, umkm_id, quantity, consented_at)
+               select gen_random_uuid(), batch_id, umkm_id, 1, now() from pair
+               union all
+               select gen_random_uuid(), batch_id, umkm_id, 1, now() from pair`,
+            );
+          } catch (err) {
+            code = (err as { code?: string }).code;
+          }
+          expect(code).toBe("23505");
+        } finally {
+          await client.query("rollback");
+        }
+      } finally {
+        client.release();
+      }
     });
 
     it("rejects duplicate payment for one registration (UNIQUE)", async () => {

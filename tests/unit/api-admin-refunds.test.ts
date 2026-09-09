@@ -26,7 +26,7 @@ function mockRefundsClient(rows: unknown[] = []) {
     data: { role: "admin", status: "active", full_name: "Admin" },
     error: null,
   }));
-  const range = vi.fn(async () => ({ data: rows, error: null }));
+  const range = vi.fn(async (_from: number, _to: number) => ({ data: rows, error: null }));
   const order = vi.fn(() => ({ range }));
   const eq = vi.fn(() => ({ eq, order }));
   const select = vi.fn(() => ({ eq, order }));
@@ -159,7 +159,10 @@ describe("GET /api/admin/refunds", () => {
 
   it("returns 500 when the query fails", async () => {
     const { range } = mockRefundsClient();
-    range.mockResolvedValue({ data: null, error: { message: "boom" } });
+    range.mockResolvedValue({
+      data: null as unknown as unknown[],
+      error: { message: "boom" } as unknown as null,
+    });
     const res = await listRefunds(
       new NextRequest("http://localhost/api/admin/refunds"),
     );

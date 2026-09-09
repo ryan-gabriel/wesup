@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { getAdminClient } from "@/lib/supabase/admin";
+import {
+  getAdminClient,
+  SupabaseAdminConfigurationError,
+} from "@/lib/supabase/admin";
 import { getServerClient } from "@/lib/supabase/server";
 import { normalizeEmail, type RegistrationSuccessResponse, type SupplierRegistrationFields } from "@/lib/supplier-registration/contracts";
 
@@ -17,8 +20,19 @@ export class SupplierEmailRateLimitError extends Error {
   }
 }
 
+export type SupplierRegistrationStage =
+  | "configuration"
+  | "email_lookup"
+  | "auth_signup"
+  | "photo_upload"
+  | "profile_insert"
+  | "unknown";
+
 export class SupplierRegistrationError extends Error {
-  constructor(message = "Supplier registration failed") {
+  constructor(
+    message = "Supplier registration failed",
+    public readonly stage: SupplierRegistrationStage = "unknown",
+  ) {
     super(message);
     this.name = "SupplierRegistrationError";
   }
@@ -82,7 +96,15 @@ export async function registerSupplier(
   dependencies?: RegistrationDependencies,
 ): Promise<RegistrationSuccessResponse> {
   const authClient: RegistrationDependencies["authClient"] = dependencies?.authClient ?? (await getServerClient() as unknown as RegistrationDependencies["authClient"]);
-  const adminClient: RegistrationDependencies["adminClient"] = dependencies?.adminClient ?? (getAdminClient() as unknown as RegistrationDependencies["adminClient"]);
+  let adminClient: RegistrationDependencies["adminClient"];
+  try {
+    adminClient = dependencies?.adminClient ?? (getAdminClient() as unknown as RegistrationDependencies["adminClient"]);
+  } catch (error) {
+    if (error instanceof SupabaseAdminConfigurationError) {
+      throw new SupplierRegistrationError("Supplier admin configuration is missing", "configuration");
+    }
+    throw error;
+  }
   const email = normalizeEmail(fields.email);
 
   const { data: existing, error: lookupError } = await adminClient
@@ -90,7 +112,7 @@ export async function registerSupplier(
     .select("id")
     .eq("email", email)
     .maybeSingle();
-  if (lookupError) throw new SupplierRegistrationError();
+  if (lookupError) throw new SupplierRegistrationError("Supplier profile lookup failed", "email_lookup");
   if (existing) throw new DuplicateSupplierEmailError();
 
   const { data: signup, error: signupError } = await authClient.auth.signUp({
@@ -105,7 +127,7 @@ export async function registerSupplier(
     if (signupError.code === "user_already_exists" || /already registered|already exists/i.test(signupError.message ?? "")) {
       throw new DuplicateSupplierEmailError();
     }
-    throw new SupplierRegistrationError();
+    throw new SupplierRegistrationError("Supplier auth signup failed", "auth_signup");
   }
 
   const user = signup.user;
@@ -115,14 +137,18 @@ export async function registerSupplier(
 
   const path = `business/${user.id}/${randomUUID()}.webp`;
   let uploaded = false;
+  let stage: SupplierRegistrationStage = "photo_upload";
   try {
     const upload = await adminClient.storage.from("wesup-assets").upload(
       path,
       fields.businessPhoto,
       { contentType: "image/webp", cacheControl: "3600", upsert: false },
     );
-    if (upload.error || !upload.data) throw new SupplierRegistrationError();
+    if (upload.error || !upload.data) {
+      throw new SupplierRegistrationError("Supplier business photo upload failed", "photo_upload");
+    }
     uploaded = true;
+    stage = "profile_insert";
 
     const { error: insertError } = await adminClient.from("supplier_profiles").insert({
       user_id: user.id,
@@ -134,7 +160,9 @@ export async function registerSupplier(
       ktp_photo_url: null,
       nik: null,
     });
-    if (insertError) throw new SupplierRegistrationError();
+    if (insertError) {
+      throw new SupplierRegistrationError("Supplier profile insert failed", "profile_insert");
+    }
 
     return {
       ok: true,
@@ -147,8 +175,12 @@ export async function registerSupplier(
     }
     await adminClient.auth.admin.deleteUser(user.id).catch(() => undefined);
     if (error instanceof SupplierRegistrationError) throw error;
-    throw new SupplierRegistrationError();
+    throw new SupplierRegistrationError("Supplier registration transaction failed", stage);
   }
+}
+
+export function isSupplierConfigurationError(error: unknown): boolean {
+  return error instanceof SupplierRegistrationError && error.stage === "configuration";
 }
 
 export function isDuplicateSupplierEmailError(error: unknown): boolean {

@@ -28,6 +28,7 @@ interface ParsedSchema {
 
 function stripUnsupported(sql: string): string {
   return sql
+    .replace(/(ALTER\s+TYPE\s+(?:public\.)?[a-zA-Z0-9_]+\s+ADD\s+VALUE)\s+IF\s+NOT\s+EXISTS/gi, "$1")
     .replace(/--[^\n]*/g, "")
     .replace(/CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION[\s\S]*?\$\$\s*;/gi, "")
     .replace(/CREATE\s+TRIGGER[^;]+;/gi, "")

@@ -17,6 +17,7 @@ import {
 } from "@/lib/catalog/categories";
 import { parsePositiveInt } from "@/lib/admin/validation";
 import { enforceRateLimit } from "@/lib/rate-limit";
+import { mapMarketplaceRpcRows, type MarketplaceRpcRow } from "@/lib/marketplace/api-mapper";
 
 export const dynamic = "force-dynamic";
 
@@ -33,35 +34,63 @@ interface SearchOriginQuery {
   };
 }
 
-interface SearchRpcRow {
-  total_count?: number | string;
-  [key: string]: unknown;
+interface SearchOrigin {
+  latitude: number;
+  longitude: number;
+  source: "umkm_profile" | "request" | "bandung_default";
+}
+
+interface MarketplaceRpcError {
+  code?: unknown;
+  message?: unknown;
+  details?: unknown;
+  hint?: unknown;
+}
+
+function isMarketplaceRpcError(error: unknown): error is MarketplaceRpcError {
+  return typeof error === "object" && error !== null;
+}
+
+function isMarketplaceSchemaOutdated(error: unknown): boolean {
+  if (!isMarketplaceRpcError(error)) return false;
+  return error.code === "PGRST202" && /search_batches/i.test(String(error.message ?? ""));
 }
 
 async function resolveSearchOrigin(
   client: { from: (table: string) => unknown },
   ctx: AuthContext | null,
-): Promise<{ lat: number; lng: number }> {
-  const table =
-    ctx?.role === "supplier"
-      ? "supplier_profiles"
-      : ctx?.role === "umkm"
-        ? "umkm_profiles"
-        : null;
-  if (!table || !ctx) {
-    return BANDUNG_CENTER;
+): Promise<SearchOrigin> {
+  if (ctx?.role !== "umkm") {
+    return {
+      latitude: BANDUNG_CENTER.lat,
+      longitude: BANDUNG_CENTER.lng,
+      source: "bandung_default",
+    };
   }
 
-  const query = client.from(table) as SearchOriginQuery;
+  const query = client.from("umkm_profiles") as SearchOriginQuery;
   const { data } = await query
     .select("latitude,longitude")
     .eq("user_id", ctx.userId)
     .maybe();
 
-  if (!data || data.latitude === null || data.longitude === null) {
-    return BANDUNG_CENTER;
+  const latitude = Number(data?.latitude);
+  const longitude = Number(data?.longitude);
+  if (
+    !Number.isFinite(latitude) ||
+    !Number.isFinite(longitude) ||
+    latitude < -90 ||
+    latitude > 90 ||
+    longitude < -180 ||
+    longitude > 180
+  ) {
+    return {
+      latitude: BANDUNG_CENTER.lat,
+      longitude: BANDUNG_CENTER.lng,
+      source: "bandung_default",
+    };
   }
-  return { lat: Number(data.latitude), lng: Number(data.longitude) };
+  return { latitude, longitude, source: "umkm_profile" };
 }
 
 export async function GET(req: Request) {
@@ -155,6 +184,29 @@ export async function GET(req: Request) {
     );
   }
 
+  let minPrice: number | null = null;
+  const minPriceParam = url.searchParams.get("minPrice");
+  if (minPriceParam !== null && minPriceParam.trim() !== "") {
+    const parsed = Number(minPriceParam);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return NextResponse.json({ error: "minPrice must be a non-negative number" }, { status: 400 });
+    }
+    minPrice = parsed;
+  }
+
+  let maxPrice: number | null = null;
+  const maxPriceParam = url.searchParams.get("maxPrice");
+  if (maxPriceParam !== null && maxPriceParam.trim() !== "") {
+    const parsed = Number(maxPriceParam);
+    if (!Number.isFinite(parsed) || parsed < 0) {
+      return NextResponse.json({ error: "maxPrice must be a non-negative number" }, { status: 400 });
+    }
+    maxPrice = parsed;
+  }
+  if (minPrice !== null && maxPrice !== null && minPrice > maxPrice) {
+    return NextResponse.json({ error: "minPrice cannot exceed maxPrice" }, { status: 400 });
+  }
+
   const limitParam = url.searchParams.get("limit");
   const limit =
     limitParam === null ? SEARCH_DEFAULT_LIMIT : parsePositiveInt(limitParam);
@@ -177,29 +229,54 @@ export async function GET(req: Request) {
 
   const origin =
     lat !== null && lng !== null
-      ? { lat, lng }
+      ? { latitude: lat, longitude: lng, source: "request" as const }
       : await resolveSearchOrigin(client, ctx);
 
   const { data, error } = await client.rpc("search_batches", {
     p_query: query === "" ? null : query,
     p_categories: categories,
-    p_lat: origin.lat,
-    p_lng: origin.lng,
+    p_lat: origin.latitude,
+    p_lng: origin.longitude,
     p_radius_km: radiusKm,
+    p_min_price: minPrice,
+    p_max_price: maxPrice,
     p_limit: limit,
     p_offset: offset,
   });
   if (error) {
-    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+    const rpcError: MarketplaceRpcError = isMarketplaceRpcError(error) ? error : {};
+    console.error("[marketplace/search] search_batches failed", {
+      code: rpcError.code,
+      message: rpcError.message,
+      details: rpcError.details,
+      hint: rpcError.hint,
+    });
+    if (isMarketplaceSchemaOutdated(error)) {
+      return NextResponse.json(
+        {
+          error: "Marketplace sedang disiapkan. Coba lagi sebentar.",
+          code: "MARKETPLACE_SCHEMA_OUTDATED",
+        },
+        { status: 503 },
+      );
+    }
+    return NextResponse.json(
+      { error: "Penawaran belum dapat dimuat. Coba lagi.", code: "MARKETPLACE_QUERY_FAILED" },
+      { status: 500 },
+    );
   }
 
-  const rows = (data ?? []) as SearchRpcRow[];
-  const items = rows.map((row) => {
-    const item = { ...row };
-    delete item.total_count;
-    return item;
-  });
-  const total = rows.length > 0 ? Number(rows[0].total_count ?? 0) : 0;
+  const rows = (data ?? []) as MarketplaceRpcRow[];
+  const items = mapMarketplaceRpcRows(rows);
+  const total = rows.length > 0 ? Math.max(0, Number(rows[0].total_count ?? 0)) : 0;
+  const totalPages = total === 0 ? 0 : Math.ceil(total / limit);
 
-  return NextResponse.json({ items, total, page, limit });
+  return NextResponse.json({
+    items,
+    total,
+    page,
+    pageSize: limit,
+    totalPages,
+    origin,
+  });
 }

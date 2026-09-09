@@ -2,7 +2,7 @@ import type { BatchCategory } from "@/lib/catalog/categories";
 
 export type AsyncPhase = "idle" | "loading" | "success" | "error";
 
-export type SupplierBatchStatus = "PUBLISHED" | "CANCELLED_BY_SUPPLIER";
+export type SupplierBatchStatus = "DRAFT" | "PUBLISHED" | "CLOSED" | "CANCELLED_BY_SUPPLIER" | "TAKEDOWN" | "COMPLETED";
 
 export interface SupplierBatchTier {
   tierNumber: number;

@@ -19,7 +19,7 @@ function readAllSql(): string {
 
 function functionBody(sql: string, name: string): string {
   const re = new RegExp(
-    `create\\s+(?:or\\s+replace\\s+)?function\\s+public\\.${name}[\\s\\S]*?\\$\\$;`,
+    `create\\s+(?:or\\s+replace\\s+)?function\\s+public\\.${name}\\b[\\s\\S]*?\\$\\$;`,
     "ig",
   );
   const matches = [...sql.matchAll(re)];

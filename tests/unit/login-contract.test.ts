@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   getAccountStatusMessage,
   getRoleMismatchMessage,
+  LOGIN_REDIRECT_BY_ROLE,
   parseLoginPayload,
 } from "@/lib/auth/login-contract";
 
@@ -60,5 +61,16 @@ describe("login feedback", () => {
     expect(getRoleMismatchMessage("supplier", "pending")).toBe(
       "Pendaftaran pemasok Anda masih menunggu verifikasi Admin.",
     );
+  });
+});
+
+describe("post-login redirect destination", () => {
+  it("sends a supplier to the supplier dashboard after login", () => {
+    expect(LOGIN_REDIRECT_BY_ROLE.supplier).toBe("/supplier");
+  });
+
+  it("keeps admin on home and sends umkm to the marketplace", () => {
+    expect(LOGIN_REDIRECT_BY_ROLE.admin).toBe("/");
+    expect(LOGIN_REDIRECT_BY_ROLE.umkm).toBe("/marketplace");
   });
 });
