@@ -42,10 +42,6 @@ function mockActiveUser() {
   mockGetServerClient.mockResolvedValue({ auth: { getUser }, from } as unknown as SupabaseClient<Database>);
 }
 
-function get(): NextRequest {
-  return new NextRequest("http://localhost/api/webhook/midtrans/qa");
-}
-
 function post(body: unknown): NextRequest {
   return new NextRequest("http://localhost/api/webhook/midtrans/qa", {
     method: "POST",
@@ -65,7 +61,7 @@ describe("QA webhook kill-switch (J3 — staging/dev only)", () => {
     vi.stubEnv("APP_ENV", "production");
     mockActiveUser();
     expect((await qaToggle(post({ mode: "disabled" }))).status).toBe(403);
-    expect((await qaState(get())).status).toBe(403);
+    expect((await qaState()).status).toBe(403);
     expect(redisMock.set).not.toHaveBeenCalled();
   });
 
@@ -76,7 +72,7 @@ describe("QA webhook kill-switch (J3 — staging/dev only)", () => {
     expect(res.status).toBe(200);
     expect(redisMock.set).toHaveBeenCalledWith("webhook:midtrans:disabled", "1");
     redisMock.get.mockResolvedValue("1");
-    const state = await qaState(get());
+    const state = await qaState();
     await expect(state.json()).resolves.toMatchObject({
       success: true,
       data: { disabled: true },

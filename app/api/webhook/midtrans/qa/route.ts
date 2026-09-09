@@ -36,7 +36,7 @@ async function currentState() {
 }
 
 /** GET — status kill-switch sinkronisasi webhook. */
-export async function GET(_request?: NextRequest): Promise<NextResponse> {
+export async function GET(): Promise<NextResponse> {
   const blocked = productionGuard();
   if (blocked) return blocked;
 
