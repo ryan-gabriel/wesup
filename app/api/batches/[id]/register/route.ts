@@ -10,6 +10,7 @@ import { isUuid } from "@/lib/admin/validation";
 import { acquireLock, releaseLock } from "@/app/api/_lib/distributed-lock";
 import { rateLimit } from "@/app/api/_lib/rate-limit";
 import { apiRateLimit } from "@/app/api/_lib/response";
+import { triggerLazyCutoff } from "@/lib/batches/cutoff-runner";
 import { redis } from "@/lib/redis";
 
 export const dynamic = "force-dynamic";
@@ -114,6 +115,8 @@ export async function POST(
         );
       }
       if (now > closesAt) {
+        // Lazy cutoff: request pertama pasca-tutup mengunci harga, lalu tolak
+        await triggerLazyCutoff(client, batchId, now.getTime());
         return NextResponse.json(
           { error: "Registration window has closed" },
           { status: 400 },
