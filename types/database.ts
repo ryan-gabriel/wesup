@@ -979,6 +979,14 @@ export interface Database {
         };
         Returns: void;
       };
+      apply_hit_and_run: {
+        Args: {
+          p_batch_id: string;
+          p_ip_address?: string | null;
+          p_user_agent?: string | null;
+        };
+        Returns: Record<string, number>;
+      };
       is_supplier_approved: {
         Args: Record<PropertyKey, never>;
         Returns: boolean;

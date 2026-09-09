@@ -60,7 +60,7 @@ describe("apply_hit_and_run (Hit & Run auto-suspend)", () => {
   it("escalates strike 1 → warning, 2 → 7-day suspend, 3+ → permanent", () => {
     expect(body).toMatch(/strike_count\s*\+\s*1/i);
     expect(body).toMatch(/suspended_temporary/i);
-    expect(body).toMatch(/payment_closes_at\s*\+\s*interval\s*'7 days'/i);
+    expect(body).toMatch(/closes_at\s*\+\s*interval\s*'7 days'/i);
     expect(body).toMatch(/suspended_permanent/i);
   });
 

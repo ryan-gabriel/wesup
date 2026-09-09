@@ -60,6 +60,12 @@ export async function POST(
     p_user_agent: req.headers.get("user-agent") ?? null,
   });
   if (error) {
+    if (/already resolved/i.test(error.message)) {
+      return NextResponse.json(
+        { error: "Dispute already resolved" },
+        { status: 409 },
+      );
+    }
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 

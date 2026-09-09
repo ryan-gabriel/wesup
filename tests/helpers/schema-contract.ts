@@ -84,6 +84,7 @@ export const EXPECTED_ENUMS: Record<string, string[]> = {
     "create_batch",
     "update_batch",
     "delete_batch",
+    "apply_hit_and_run",
   ],
 };
 
@@ -648,8 +649,9 @@ export const REQUIRED_FUNCTIONS = [
   "handle_batch_cancellation",
   "search_batches",
   "get_marketplace_batch",
-  "cut_off_batch",
-  "prevent_registration_outside_window",
+    "cut_off_batch",
+    "apply_hit_and_run",
+    "prevent_registration_outside_window",
   "generate_pickup_code",
   "confirm_pickup",
   "create_escrow",
