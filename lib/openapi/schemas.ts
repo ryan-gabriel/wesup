@@ -72,6 +72,7 @@ export const schemas: OpenAPIV3.ComponentsObject["schemas"] = {
   OrderDetail: {
     allOf: [{ $ref: "#/components/schemas/Order" }],
     description: "Snapshot lengkap order, invoice, payment attempt, pickup, escrow, dispute, rating, dan capability.",
+    properties: { paymentDemo: { type: "object", properties: { enabled: { type: "boolean" }, canSimulatePaid: { type: "boolean" }, blockedReason: { type: "string", nullable: true }, checkoutReference: { type: "string", nullable: true } } } },
   },
   PaymentAttempt: {
     type: "object",

@@ -7,7 +7,7 @@ import { enforceRateLimit } from "@/lib/rate-limit";
 import { getTransactionStatus, isExpiredTransaction, isSuccessfulTransaction, MidtransProviderError } from "@/lib/payments/midtrans";
 import { acquirePaymentLock, releasePaymentLock } from "@/lib/payments/order-lock";
 import { derivePaymentProgress, selectPaymentAttempt } from "@/lib/payments/progress";
-import { validateProviderPayment } from "@/lib/payments/provider-validation";
+import { providerPaymentMismatch } from "@/lib/payments/provider-validation";
 
 export const dynamic = "force-dynamic";
 type Result = { data?: unknown; error?: unknown };
@@ -70,7 +70,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
       }
       return fail("Midtrans belum dapat dihubungi. Status pembayaran belum berubah; coba periksa kembali.", "PAYMENT_PROVIDER_UNAVAILABLE", 503);
     }
-    if (!validateProviderPayment(provider.raw, providerOrderId, Number(payment.gross_amount), process.env.MIDTRANS_MERCHANT_ID?.trim())) return fail("Hasil pemeriksaan tidak sesuai tagihan. Hubungi bantuan transaksi.", "PAYMENT_PROVIDER_MISMATCH", 502);
+    const mismatch = providerPaymentMismatch(provider.raw, providerOrderId, Number(payment.gross_amount), process.env.MIDTRANS_MERCHANT_ID?.trim());
+    if (mismatch) {
+      const requestId = randomUUID();
+      console.error("[payment-reconcile] provider mismatch", {requestId, category:mismatch});
+      return NextResponse.json({error:"Hasil pemeriksaan tidak sesuai tagihan. Hubungi bantuan transaksi.",code:"PAYMENT_PROVIDER_MISMATCH",requestId},{status:502});
+    }
     const status = provider.transactionStatus.toLowerCase();
     const payload:Record<string,unknown> = { ...provider.raw, _wesup_audit:{source:"payment_reconciliation",requestId:randomUUID()} };
     for (const key of ["token","snap_token","signature_key","card"]) delete payload[key];

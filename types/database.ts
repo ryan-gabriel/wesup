@@ -73,7 +73,7 @@ export type AuditAction =
 
 // Additive overlay until the migration is deployed and generated types are refreshed.
 export type Database = import("./database.generated").Database & {
-  public: { Tables: { batches: {
+  public: { Functions: { simulate_demo_payment_paid: { Args: { p_registration_id: string; p_actor_id: string; p_batch_id: string; p_checkout_reference: string; p_request_id: string }; Returns: Json } }; Tables: { batches: {
     Row: { early_payment_minimum_quantity: number | null };
     Insert: { early_payment_minimum_quantity?: number | null };
     Update: { early_payment_minimum_quantity?: number | null };

@@ -95,7 +95,11 @@ async function request<T>(path: string, init: RequestInit = {}, env?: NodeJS.Pro
       },
     });
     const body = await response.json().catch(() => ({}));
-    if (!response.ok) {
+    // Midtrans status lookups may return HTTP 200 with an error in status_code.
+    // Treat this as a provider error before interpreting it as invoice data.
+    const embeddedCode = body && typeof body === "object" ? String(body.status_code ?? "") : "";
+    const effectiveStatus = response.ok && /^[45]\d\d$/.test(embeddedCode) ? Number(embeddedCode) : response.status;
+    if (!response.ok || effectiveStatus >= 400) {
       const record = body && typeof body === "object" ? body as Record<string, unknown> : {};
       const errorMessages = Array.isArray(record.error_messages)
         ? record.error_messages.filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
@@ -104,7 +108,7 @@ async function request<T>(path: string, init: RequestInit = {}, env?: NodeJS.Pro
       const providerMessage = errorMessages[0] ?? (statusMessage || null);
       const requestId = typeof record.request_id === "string" && record.request_id.trim().length > 0 ? record.request_id : null;
       const message = providerMessage ?? `Midtrans returned HTTP ${response.status}`;
-      throw new MidtransProviderError(message, response.status >= 500 ? 502 : response.status, response.status >= 500 || response.status === 429, {
+      throw new MidtransProviderError(message, effectiveStatus >= 500 ? 502 : effectiveStatus, effectiveStatus >= 500 || effectiveStatus === 429, {
         fromProvider: true,
         providerMessage,
         errorMessages,

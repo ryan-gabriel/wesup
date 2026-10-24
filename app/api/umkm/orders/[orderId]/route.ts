@@ -4,6 +4,7 @@ import { getAdminClient } from "@/lib/supabase/admin";
 import { resolveActiveUmkm } from "@/lib/umkm/workspace-auth";
 import { toUmkmOrderDetail, type OrderReadRow } from "@/lib/orders/read-model";
 import { DETAIL_SELECT, readCompatibleOrder } from "@/lib/orders/selects";
+import { paymentDemoFor } from "@/lib/payments/demo";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +63,18 @@ export async function GET(
   const row = result.data;
   if (!row) return errorResponse("Pesanan tidak ditemukan", "ORDER_NOT_FOUND", 404);
   const detail = toUmkmOrderDetail(row, serverTime, viewer.context.status === "active");
+  detail.paymentDemo = paymentDemoFor(detail, viewer.context.userId, viewer.context.status === "active");
+  if (detail.paymentDemo.canSimulatePaid && detail.paymentAttempt?.checkoutMode === "snap") {
+    try {
+      const session = await getAdminClient().from("payment_checkout_sessions")
+        .select("id,expires_at,cancelled_at").eq("payment_attempt_id", detail.paymentAttempt.id).maybeSingle();
+      if (session.error || !session.data || session.data.cancelled_at || !(Date.parse(session.data.expires_at) > Date.parse(serverTime))) {
+        detail.paymentDemo = { ...detail.paymentDemo, canSimulatePaid: false, checkoutReference: null, blockedReason: "Sesi checkout belum tersimpan atau telah kedaluwarsa." };
+      }
+    } catch {
+      detail.paymentDemo = { ...detail.paymentDemo, canSimulatePaid: false, checkoutReference: null, blockedReason: "Sesi checkout belum dapat diverifikasi. Muat ulang detail." };
+    }
+  }
   if (typeof rpcClient.rpc === "function" && detail.status === "registered") {
     try {
       const early = await rpcClient.rpc("get_early_payment_context", { p_batch_id: row.batch_id });

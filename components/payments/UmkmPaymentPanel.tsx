@@ -12,6 +12,7 @@ import { usePaymentWindowCountdown } from "./usePaymentWindowCountdown";
 
 import { Spinner } from "@/components/feedback";
 import { feedbackError } from "@/lib/feedback/errors";
+import { DemoPaymentAction } from "./DemoPaymentAction";
 
 declare global {
   interface Window {
@@ -129,7 +130,7 @@ export default function UmkmPaymentPanel({ order, onReload, snapConfig }: { orde
   const unknown = progress?.state === "status_unknown" || order.phase === "payment_verifying";
   const refund = order.status === "refund_pending" || order.status === "refunded";
   const integrityIssue = progress?.blockedCode === "ORDER_STATUS_INCONSISTENT";
-  const copy = integrityIssue ? {title:"Status pesanan perlu diperiksa",description:progress.blockedReason ?? "Muat ulang detail atau hubungi bantuan transaksi sebelum membayar."} : refund ? {title: order.status === "refunded" ? "Dana sudah dikembalikan" : "Pengembalian dana diproses", description:"Pembayaran tercatat. Ikuti proses pengembalian dana pada detail pesanan."} : order.status === "no_show" ? {title:"Batas pengambilan terlewat",description:"Status pesanan mengikuti ketentuan pengambilan. Tidak tersedia pembayaran tambahan."} : unknown && reconcileState !== "running" && reconcileState !== "confirming" ? {title: "Status pembayaran belum terkonfirmasi", description:"Periksa status ke Midtrans. Jangan membayar ulang sebelum hasil pemeriksaan tersedia."} : stateCopy(uiState);
+  const copy = integrityIssue ? {title:"Status pesanan perlu diperiksa",description:progress.blockedReason ?? "Muat ulang detail atau hubungi bantuan transaksi sebelum membayar."} : refund ? {title: order.status === "refunded" ? "Dana sudah dikembalikan" : "Pengembalian dana diproses", description:"Pembayaran tercatat. Ikuti proses pengembalian dana pada detail pesanan."} : order.status === "no_show" ? {title:"Batas pengambilan terlewat",description:"Status pesanan mengikuti ketentuan pengambilan. Tidak tersedia pembayaran tambahan."} : unknown && uiState !== "paid" && reconcileState !== "running" && reconcileState !== "confirming" ? {title: "Status pembayaran belum terkonfirmasi", description:"Periksa status ke Midtrans. Jangan membayar ulang sebelum hasil pemeriksaan tersedia."} : stateCopy(uiState);
   const terminalRejection = paymentError?.code === "PAYMENT_PROVIDER_REJECTED";
   const canOpen = !refund && !unknown && !terminalRejection && countdown.state !== "expired" && (progress?.canOpenCheckout ?? order.capabilities.canPay);
   const canCheck = progress?.canCheckStatus ?? Boolean(!refund && !["paid","picked_up","completed"].includes(order.status) && (attempt || order.invoice?.midtransOrderId));
@@ -178,9 +179,10 @@ export default function UmkmPaymentPanel({ order, onReload, snapConfig }: { orde
         if (!next.snapToken || !next.redirectUrl) { setPaymentError({ message: "Sesi checkout Midtrans belum lengkap. Coba lagi.", code: "PAYMENT_CHECKOUT_SESSION_FAILED" }); return; }
         openSnap(next.snapToken);
       }
+      onReload();
     } catch (reason: unknown) { setPaymentError({ message: feedbackError(reason, "Hasil penyiapan pembayaran belum terkonfirmasi. Cek status sebelum mencoba pembayaran ulang.") }); }
     finally { inFlight.current = false; if (mounted.current) setBusy(false); }
-  }, [openSnap, order.id, canOpen]);
+  }, [openSnap, order.id, canOpen, onReload]);
 
   const retry = useCallback(() => { if (lastAction === "reconcile") void reconcile(); else void charge(); }, [charge, lastAction, reconcile]);
   const openRedirect = useCallback(() => { if (redirectUrl) window.location.assign(redirectUrl); else setPaymentError({ message: "Link checkout belum tersedia. Coba buat sesi pembayaran lagi.", code: "PAYMENT_CHECKOUT_REDIRECT_MISSING" }); }, [redirectUrl]);
@@ -238,6 +240,7 @@ export default function UmkmPaymentPanel({ order, onReload, snapConfig }: { orde
     </section>
     {paymentError && <section role="alert" className="border border-wesup-red bg-wesup-paper p-4 text-sm text-wesup-ink">{paymentError.message}{paymentError.requestId && <p className="mt-2 font-mono text-[0.6875rem] uppercase tracking-[0.14em] text-wesup-ink-sub">Kode rujukan: <span className="tabular-nums">{paymentError.requestId}</span></p>}{terminalRejection && <p className="mt-2 text-wesup-ink-sub">Percobaan baru dengan data yang sama akan ditolak provider. Hubungi bantuan dengan kode rujukan di atas bila pesanan perlu diperiksa.</p>}<div className="mt-3 flex flex-wrap gap-2">{!terminalRejection && <button type="button" onClick={() => void retry()} disabled={busy} className="min-h-11 border border-wesup-ink bg-wesup-ink px-4 py-2 text-sm font-semibold text-wesup-paper transition-all duration-500 wesup-ease hover:border-wesup-red hover:bg-wesup-red disabled:opacity-60">Coba lagi</button>}{showDirectFallback && <button type="button" onClick={openRedirect} className="min-h-11 border border-wesup-ink/20 bg-wesup-paper px-4 py-2 text-sm font-semibold text-wesup-ink transition-colors duration-500 wesup-ease hover:bg-wesup-paper-sub">Buka checkout langsung</button>}</div></section>}
     {message && <p role="status" className="border border-wesup-ink/20 bg-wesup-paper-sub p-3 text-sm text-wesup-ink">{message}</p>}
+    {uiState !== "paid" && <DemoPaymentAction key={`${order.id}:${order.serverTime}`} order={order} busy={busy || countdown.state === "expired"} begin={()=>{if(inFlight.current)return false;inFlight.current=true;setBusy(true);return true;}} end={()=>{inFlight.current=false;if(mounted.current)setBusy(false);}} onSettled={next=>{setProgress(next.paymentProgress);setPaymentError(null);setMessage("");setAttempt(next.paymentAttempt);}} onReload={onReload} />}
     {order.invoice && <InvoiceCard order={order} amount={amount} />}
   </div>;
 }

@@ -124,6 +124,24 @@ export default function UmkmOrdersClient() {
   }, [load, retry]);
 
   useEffect(() => {
+    const refresh = () => setRetry(value => value + 1);
+    const visible = () => { if (document.visibilityState === "visible") refresh(); };
+    const storage = (event: StorageEvent) => { if (event.key === "wesup:orders-updated") refresh(); };
+    window.addEventListener("wesup:orders-updated", refresh);
+    window.addEventListener("pageshow", refresh);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("storage", storage);
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      window.removeEventListener("wesup:orders-updated", refresh);
+      window.removeEventListener("pageshow", refresh);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("storage", storage);
+      document.removeEventListener("visibilitychange", visible);
+    };
+  }, []);
+
+  useEffect(() => {
     const media = window.matchMedia?.("(max-width: 767px)");
     if (!media) return;
     const update = () => setIsMobile(media.matches);

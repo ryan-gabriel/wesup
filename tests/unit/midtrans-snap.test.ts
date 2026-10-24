@@ -15,6 +15,10 @@ const env = {
 
 describe("Midtrans Snap adapter", () => {
   beforeEach(() => vi.restoreAllMocks());
+  it.each([404,401,500])("honors provider error %s inside an HTTP 200 response", async code => {
+    vi.spyOn(globalThis,"fetch").mockResolvedValue(new Response(JSON.stringify({status_code:String(code),status_message:"Transaction status unavailable"}),{status:200}));
+    await expect(getTransactionStatus("WESUP-absent",env)).rejects.toMatchObject({status:code>=500?502:code,fromProvider:true});
+  });
 
   it("creates a sandbox Snap token without restricting active payment methods", async () => {
     const fetchMock = vi.spyOn(globalThis, "fetch").mockResolvedValue(

@@ -48,6 +48,14 @@ const baseOrder = {
 } satisfies Omit<UmkmOrderDetail, "paymentAttempt">;
 
 describe("UmkmPaymentPanel", () => {
+  it("shows a separate sandbox settlement action only for eligible demo users", () => {
+    const order={...baseOrder,paymentAttempt:null,paymentDemo:{enabled:true,canSimulatePaid:false,blockedReason:"Buat checkout pembayaran terlebih dahulu.",checkoutReference:null}};
+    const view=render(<UmkmPaymentPanel order={order} onReload={vi.fn()} />);
+    expect(screen.getByRole("button",{name:"Pembayaran lunas"})).toBeDisabled();
+    expect(screen.getByText("Simulasi pembayaran · Sandbox")).toBeInTheDocument();
+    view.rerender(<UmkmPaymentPanel order={{...order,paymentDemo:{...order.paymentDemo,enabled:false}}} onReload={vi.fn()} />);
+    expect(screen.queryByRole("button",{name:"Pembayaran lunas"})).not.toBeInTheDocument();
+  });
   it("shows the real payment closing date while counting down to opening", () => {
     render(<UmkmPaymentPanel order={{...baseOrder, invoice:null, paymentAttempt:null,phase:"waiting_payment_window",serverTime:"2026-09-15T00:00:00Z"}} onReload={vi.fn()} />);
     expect(screen.getByText(/Batas akhir:/)).toHaveTextContent("17 Sep 2026");

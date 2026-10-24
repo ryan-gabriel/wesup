@@ -1,0 +1,34 @@
+import { beforeEach,afterEach,describe,it,expect,vi } from "vitest";
+vi.mock("server-only",()=>({}));
+const mocks=vi.hoisted(()=>({auth:vi.fn(),admin:vi.fn(),lock:vi.fn(),release:vi.fn(),rate:vi.fn()}));
+vi.mock("@/lib/umkm/workspace-auth",()=>({resolveActiveUmkm:mocks.auth}));
+vi.mock("@/lib/supabase/admin",()=>({getAdminClient:mocks.admin}));
+vi.mock("@/lib/payments/order-lock",()=>({acquirePaymentLock:mocks.lock,releasePaymentLock:mocks.release}));
+vi.mock("@/lib/rate-limit",()=>({enforceRateLimit:mocks.rate}));
+import {POST} from "@/app/api/umkm/orders/[orderId]/payment/simulate-paid/route";
+const user="11111111-1111-4111-8111-111111111111",batch="22222222-2222-4222-8222-222222222222";
+let row:Record<string,unknown>,rpc:ReturnType<typeof vi.fn>,query:{select:ReturnType<typeof vi.fn>;eq:ReturnType<typeof vi.fn>;maybeSingle:ReturnType<typeof vi.fn>};
+const call=(body:unknown={checkoutReference:"checkout"})=>POST(new Request("http://localhost/api/demo",{method:"POST",body:JSON.stringify(body)}),{params:Promise.resolve({orderId:user})});
+beforeEach(()=>{
+ vi.clearAllMocks();vi.stubEnv("PAYMENT_DEMO_ENABLED","true");vi.stubEnv("MIDTRANS_IS_PRODUCTION","false");vi.stubEnv("PAYMENT_DEMO_ALLOWED_UMKM_IDS",user);vi.stubEnv("PAYMENT_DEMO_ALLOWED_BATCH_IDS",batch);
+ row={id:user,batch_id:batch,status:"pending_payment",quantity:1,final_amount:10000,locked_tier_number:1,created_at:new Date().toISOString(),batch:{status:"closed"},payment:{id:batch,gross_amount:10000,status:"pending"}};
+ query={select:vi.fn(()=>query),eq:vi.fn(()=>query),maybeSingle:vi.fn(async()=>({data:row,error:null}))};
+ mocks.auth.mockResolvedValue({client:{from:()=>query},context:{userId:user,status:"active"}});
+ mocks.lock.mockResolvedValue({acquired:true,token:"token"});mocks.release.mockResolvedValue(undefined);mocks.rate.mockResolvedValue(null);
+ rpc=vi.fn(async()=>{row={...row,status:"paid",payment:{id:batch,status:"paid",gross_amount:10000}};return {data:{duplicate:false},error:null};});mocks.admin.mockReturnValue({rpc});
+});
+afterEach(()=>vi.unstubAllEnvs());
+describe("sandbox settlement API",()=>{
+ it("rejects cross-origin settlement",async()=>{const response=await POST(new Request("https://example.test/api/demo",{method:"POST",headers:{origin:"https://untrusted.test"},body:JSON.stringify({checkoutReference:"checkout"})}),{params:Promise.resolve({orderId:user})});expect(response.status).toBe(403);expect(mocks.auth).not.toHaveBeenCalled();expect(rpc).not.toHaveBeenCalled();});
+ it("uses verified owner and server batch; returns a fresh authoritative snapshot",async()=>{const response=await call();expect(response.status).toBe(200);expect(await response.json()).toMatchObject({simulated:true,duplicate:false,order:{id:user,status:"paid"}});expect(rpc).toHaveBeenCalledWith("simulate_demo_payment_paid",expect.objectContaining({p_actor_id:user,p_batch_id:batch,p_checkout_reference:"checkout"}));expect(mocks.release).toHaveBeenCalledWith(user,"token");expect(query.eq).toHaveBeenCalledWith("umkm_id",user);});
+ it("does not accept client amounts as authority",async()=>{await call({checkoutReference:"checkout",amount:1,userId:batch});expect(rpc.mock.calls[0][1]).not.toHaveProperty("amount");expect(rpc.mock.calls[0][1].p_actor_id).toBe(user);});
+ it.each(["PAYMENT_DEMO_ENABLED","PAYMENT_DEMO_ALLOWED_UMKM_IDS","PAYMENT_DEMO_ALLOWED_BATCH_IDS"])("fails closed without %s",async key=>{vi.stubEnv(key,"");expect((await call()).status).toBe(403);expect(rpc).not.toHaveBeenCalled();});
+ it("cannot simulate production payments",async()=>{vi.stubEnv("MIDTRANS_IS_PRODUCTION","true");expect((await call()).status).toBe(403);expect(rpc).not.toHaveBeenCalled();});
+ it("rejects missing checkout",async()=>{expect((await call({})).status).toBe(400);expect(rpc).not.toHaveBeenCalled();});
+ it("returns not found for another owner's order",async()=>{query.maybeSingle.mockResolvedValueOnce({data:null,error:null});expect((await call()).status).toBe(404);expect(rpc).not.toHaveBeenCalled();});
+ it("rejects suspended accounts",async()=>{mocks.auth.mockResolvedValueOnce({client:{},context:{userId:user,status:"suspended"}});expect((await call()).status).toBe(403);expect(rpc).not.toHaveBeenCalled();});
+ it("shares the payment lock",async()=>{mocks.lock.mockResolvedValueOnce({acquired:false});expect((await call()).status).toBe(409);expect(rpc).not.toHaveBeenCalled();});
+ it("does not claim success after RPC rejection",async()=>{rpc.mockResolvedValueOnce({data:null,error:{code:"22023"}});expect((await call()).status).toBe(409);expect(mocks.release).toHaveBeenCalled();});
+ it("reports unknown result if post-commit refresh fails",async()=>{query.maybeSingle.mockResolvedValueOnce({data:row,error:null}).mockResolvedValueOnce({data:null,error:{}});expect((await call()).status).toBe(503);expect(rpc).toHaveBeenCalledTimes(1);});
+ it("does not claim settlement if refreshed state is still pending",async()=>{rpc.mockResolvedValueOnce({data:{duplicate:false},error:null});expect((await call()).status).toBe(503);});
+});
