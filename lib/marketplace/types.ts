@@ -8,6 +8,13 @@ export interface MarketplaceAvailability {
   remainingQuantity: number | null;
 }
 
+/** The UMKM viewer's registration for the batch being viewed. */
+export interface ViewerRegistration {
+  registrationId: string;
+  quantity: number | null;
+  canWithdraw: boolean;
+}
+
 export interface MarketplaceTier {
   tierNumber: number;
   minVolume: number;

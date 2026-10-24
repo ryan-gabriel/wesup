@@ -1,0 +1,15 @@
+flowchart TD
+    A[Supplier Register] --> B[Upload KTP & Business Photo]
+    B --> C[Insert supplier_profiles<br/>verification_status='pending']
+    C --> D[Admin Fisik Survey]
+    D --> E{Approved?}
+    E -->|No| F[Reject + Alasan]
+    E -->|Yes| G[verification_status='approved']
+    G --> H[Create Batch Draft]
+    H --> I[Upload Product Photo]
+    I --> J[Input Tiers + Timeline]
+    J --> K{Validasi Linear<br/>Time & Tier Rules?}
+    K -->|No| L[Error: Time-travel/Harga Terbalik]
+    K -->|Yes| M[Insert batches + batch_tiers + batch_timeline]
+    M --> N[status='published']
+    N --> O[Muncul di Marketplace]

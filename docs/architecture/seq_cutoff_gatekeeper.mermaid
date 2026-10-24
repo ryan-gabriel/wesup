@@ -1,0 +1,18 @@
+sequenceDiagram
+    participant Client
+    participant API as /api/batches/[id]/cutoff
+    participant Redis
+    participant DB as Supabase RPC
+    
+    Client->>API: POST cutoff
+    API->>Redis: SETNX cutoff-lock:{id} <uuid> EX 30
+    alt Lock acquired
+        Redis-->>API: OK
+        API->>DB: RPC close_batch_and_issue_invoices
+        DB-->>API: Batch closed + invoices created
+        API->>Redis: DEL cutoff-lock:{id} (Lua compare-and-delete)
+        API-->>Client: 200 OK
+    else Lock failed
+        Redis-->>API: nil
+        API-->>Client: 409 "Already processing"
+    end

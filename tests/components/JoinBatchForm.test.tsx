@@ -122,6 +122,25 @@ describe("JoinBatchForm duplicate registration", () => {
     details: { registrationId: "reg-existing", quantity: 5, canWithdraw: true },
   };
 
+  it("shows an existing registration on load instead of the join form", () => {
+    render(
+      <JoinBatchForm
+        item={ITEM}
+        consentGiven
+        initialRegistration={{ registrationId: "reg-existing", quantity: 5, canWithdraw: true }}
+        onSuccess={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText(/sudah terdaftar/i)).toBeInTheDocument();
+    expect(screen.getByRole("spinbutton", { name: /jumlah porsi/i })).toHaveValue(5);
+    expect(screen.getByRole("link", { name: /buka pesanan saya/i })).toHaveAttribute(
+      "href",
+      "/umkm/pesanan/reg-existing",
+    );
+    expect(screen.queryByRole("button", { name: /daftar sekarang/i })).not.toBeInTheDocument();
+  });
+
   it("reports the existing registration instead of a false success", async () => {
     const user = userEvent.setup();
     fetchMock.mockResolvedValue(
@@ -249,6 +268,7 @@ describe("JoinBatchForm terms gate", () => {
     expect(button).toBeDisabled();
     expect(button.className).toContain("cursor-not-allowed");
     expect(button.className).toContain("bg-wesup-paper-sub");
+    expect(button.className).toContain("text-wesup-ink/40");
     expect(button.className).not.toContain("bg-wesup-ink");
     expect(
       screen.getByText(/centang persetujuan syarat di atas/i),

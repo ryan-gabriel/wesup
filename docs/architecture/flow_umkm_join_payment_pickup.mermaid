@@ -1,0 +1,36 @@
+flowchart TD
+    A[UMKM Browse Marketplace] --> B[Filter Radius/Kategori/Harga]
+    B --> C[View Detail Batch]
+    C --> D[Centang Consent Lokasi<br/>+ Timestamp Recorded]
+    D --> E[POST /api/registrations]
+    E --> F{API Gatekeeper:<br/>registration_opens ≤ now < registration_closes?}
+    F -->|No| G[403: Belum Buka / Sudut Tutup]
+    F -->|Yes| H[Redis INCR Atomic Counter]
+    H --> I{Kapasitas Cukup?}
+    I -->|No| J[409: Kapasitas Penuh]
+    I -->|Yes| K[Insert registrations<br/>status='registered']
+    K --> L[Real-time Progress Bar Update]
+    L --> M[Registration Window Closes]
+    M --> N[POST /api/batches/[id]/cutoff<br/>(Redis SETNX Lock)]
+    N --> O[RPC cut_off_batch / close_batch_and_issue_invoices]
+    O --> P[Reconcile Volume dari registrations]
+    P --> Q[Lock Tier & Price per Unit<br/>Fallback ke Tier 1]
+    Q --> R[batches.status='closed']
+    R --> S[Generate Midtrans QRIS Invoice]
+    S --> T[UMKM Bayar di Payment Window]
+    T --> U{Midtrans Webhook<br/>paid?}
+    U -->|No - Expired| V[Hit-and-Run Strike<br/>Escalation]
+    U -->|Yes| W[payments.status='paid'<br/>registrations.status='paid']
+    W --> X[Generate Pickup Code QR/PIN]
+    X --> Y[Supplier Scan QR / Input PIN]
+    Y --> Z[POST /api/pickups/[id]/confirm]
+    Z --> AA[RPC confirm_pickup]
+    AA --> AB[create_escrow<br/>auto_release_at = now + 24h]
+    AB --> AC[registrations.status='picked_up']
+    AC --> AD{24h Passed + No Dispute?}
+    AD -->|Yes| AE[Auto-Release → Supplier]
+    AD -->|Dispute Filed| AF[Escrow Frozen<br/>auto_release_at=NULL]
+    AF --> AG[Admin Arbitration]
+    AG --> AH{Dispute Resolved}
+    AH -->|UMKM Win| AI[Full Refund Queue]
+    AH -->|Supplier Win| AJ[Release → Supplier]

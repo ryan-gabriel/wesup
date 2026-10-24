@@ -11,8 +11,33 @@ import { getCurrentUser, type AuthClient } from "@/lib/supabase/auth";
 import { resolveMarketplaceOrigin, type MarketplaceOriginClient } from "@/lib/marketplace/origin";
 import { getViewerAccessState, type AccessStateClient } from "@/lib/auth/access-state";
 import { isUuid } from "@/lib/admin/validation";
+import type { ViewerRegistration } from "@/lib/marketplace/types";
 
 export const dynamic = "force-dynamic";
+
+async function readViewerRegistration(
+  client: Awaited<ReturnType<typeof getServerClient>>,
+  batchId: string,
+  userId: string,
+  canWithdraw: boolean,
+): Promise<ViewerRegistration | null> {
+  try {
+    const { data, error } = await client
+      .from("registrations")
+      .select("id,quantity,status")
+      .eq("batch_id", batchId)
+      .eq("umkm_id", userId)
+      .maybeSingle();
+    if (error || !data || data.status === "cancelled") return null;
+    return {
+      registrationId: data.id,
+      quantity: data.quantity,
+      canWithdraw: canWithdraw && data.status === "registered",
+    };
+  } catch {
+    return null;
+  }
+}
 
 export const metadata: Metadata = {
   title: "Detail Penawaran | Wesup",
@@ -36,6 +61,19 @@ export default async function MarketplaceDetailPage({
   const viewerAccess = await getViewerAccessState(client as unknown as AccessStateClient);
   const viewerRole = viewerAccess?.role ?? null;
   const viewerProfileComplete = viewerAccess?.role === "umkm" ? viewerAccess.profileComplete : undefined;
+  const viewerRegistration =
+    viewerAccess?.role === "umkm" && context
+      ? await readViewerRegistration(
+          client,
+          id,
+          context.userId,
+          // ponytail: mirrors get_registration_volume_v2.canWithdraw from the page
+          // snapshot; the withdraw endpoint remains the authority.
+          item.policyVersion === 2 &&
+            item.status === "ACTIVE" &&
+            item.availability?.canRegister === true,
+        )
+      : null;
   const configuredSiteUrl = process.env.NEXT_PUBLIC_SITE_URL;
   if (!configuredSiteUrl && process.env.NODE_ENV === "production") {
     throw new Error("NEXT_PUBLIC_SITE_URL must be configured for canonical marketplace links");
@@ -63,6 +101,7 @@ export default async function MarketplaceDetailPage({
             viewerRole={viewerRole}
             viewerProfileComplete={viewerProfileComplete}
             needsProfileLocation={origin.needsProfileLocation}
+            viewerRegistration={viewerRegistration}
           />
         </div>
       </div>

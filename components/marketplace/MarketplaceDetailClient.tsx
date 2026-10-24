@@ -9,6 +9,7 @@ import type {
   MarketplaceItem,
   MarketplaceProgressResponse,
   MarketplaceTier,
+  ViewerRegistration,
 } from "@/lib/marketplace/types";
 import { deriveTierProgress, hasTierDiscount } from "@/lib/marketplace/tier-progress";
 import { buildWhatsAppShareUrl } from "@/lib/marketplace/share-link";
@@ -84,6 +85,8 @@ export interface MarketplaceDetailClientProps {
   viewerProfileComplete?: boolean;
   /** Whether this UMKM is using the temporary Bandung fallback. */
   needsProfileLocation?: boolean;
+  /** The viewer's existing registration for this batch, when any. */
+  viewerRegistration?: ViewerRegistration | null;
 }
 
 export default function MarketplaceDetailClient({
@@ -92,6 +95,7 @@ export default function MarketplaceDetailClient({
   viewerRole,
   viewerProfileComplete = true,
   needsProfileLocation = false,
+  viewerRegistration = null,
 }: MarketplaceDetailClientProps) {
   const [consentGiven, setConsentGiven] = useState(false);
   const [routeSummary, setRouteSummary] = useState<MarketplaceRouteSummary | null>(null);
@@ -166,7 +170,7 @@ export default function MarketplaceDetailClient({
             {canJoinBatch && <LocationConsentCheckbox onChange={checked => setConsentGiven(checked)} />}
             <div className="app-purchase-dock sticky z-10 -mx-5 border-t border-wesup-ink/15 bg-wesup-paper px-5 py-4 sm:static sm:mx-0 sm:border-0 sm:p-0">
               {!canJoinBatch && item.policyVersion === 2 && <JoinIntentQuantity item={item} />}
-              {canJoinBatch ? <JoinBatchForm item={liveItem} consentGiven={consentGiven} availabilityBlocked={!!progressError || !liveProgress.availability} onAvailabilityCheck={refresh} onSuccess={({ count }) => applyRegistration(count)} /> : isUmkm ? <Link href={`/umkm/onboarding?returnTo=/marketplace/${encodeURIComponent(item.id)}`} className="inline-flex min-h-12 w-full items-center justify-center bg-wesup-ink px-4 py-3 text-sm font-semibold text-wesup-paper transition-colors duration-500 wesup-ease hover:bg-wesup-red">Lengkapi profil untuk Mendaftar</Link> : viewerRole === null ? <Link href={`/login?role=umkm&returnTo=/marketplace/${encodeURIComponent(item.id)}`} className="inline-flex min-h-12 w-full items-center justify-center gap-2 bg-wesup-ink px-4 py-3 text-sm font-semibold text-wesup-paper transition-colors duration-500 wesup-ease hover:bg-wesup-red"><LogIn aria-hidden="true" className="size-4" />Masuk sebagai UMKM untuk Mendaftar</Link> : <p className="border border-wesup-ink/15 p-4 text-center text-sm leading-6">Pendaftaran hanya untuk akun UMKM.</p>}
+              {canJoinBatch ? <JoinBatchForm item={liveItem} consentGiven={consentGiven} initialRegistration={viewerRegistration} availabilityBlocked={!!progressError || !liveProgress.availability} onAvailabilityCheck={refresh} onSuccess={({ count }) => applyRegistration(count)} /> : isUmkm ? <Link href={`/umkm/onboarding?returnTo=/marketplace/${encodeURIComponent(item.id)}`} className="inline-flex min-h-12 w-full items-center justify-center bg-wesup-ink px-4 py-3 text-sm font-semibold text-wesup-paper transition-colors duration-500 wesup-ease hover:bg-wesup-red">Lengkapi profil untuk Mendaftar</Link> : viewerRole === null ? <Link href={`/login?role=umkm&returnTo=/marketplace/${encodeURIComponent(item.id)}`} className="inline-flex min-h-12 w-full items-center justify-center gap-2 bg-wesup-ink px-4 py-3 text-sm font-semibold text-wesup-paper transition-colors duration-500 wesup-ease hover:bg-wesup-red"><LogIn aria-hidden="true" className="size-4" />Masuk sebagai UMKM untuk Mendaftar</Link> : <p className="border border-wesup-ink/15 p-4 text-center text-sm leading-6">Pendaftaran hanya untuk akun UMKM.</p>}
             </div>
             <a href={shareUrl} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-12 w-full items-center justify-center gap-2 border border-wesup-ink/20 px-4 py-3 text-sm font-semibold transition-colors duration-500 wesup-ease hover:bg-wesup-paper-sub"><Share2 aria-hidden="true" className="size-4" />Bagikan via WhatsApp</a>
           </div>

@@ -55,10 +55,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ ord
     try { provider = await getTransactionStatus(providerOrderId); }
     catch (error) {
       if (error instanceof MidtransProviderError && error.status === 404) {
-        const beforeMethod = attempt?.integration_type === "snap" && !attempt.payment_type && attempt.provider_status === "pending";
+        const beforeMethod = attempt?.integration_type === "snap" && !attempt.payment_type && ["pending", "creation_unknown"].includes(String(attempt.provider_status));
         if (attempt?.id && beforeMethod) {
           const expiredCheckout = Date.parse(String(attempt.expires_at ?? "")) <= Date.now();
-          const saved = await admin.from("payment_attempts").update({provider_checked_at: new Date().toISOString(), ...(expiredCheckout ? {status:"expired",provider_status:"snap_expired"} : {})}).eq("id", attempt.id);
+          // Midtrans tidak mengenal order ini: tidak ada checkout yang bisa dibayar, jadi attempt ditutup
+          // supaya UMKM dapat membuat checkout baru (tanpa ini attempt macet selamanya).
+          const notCreated = attempt.provider_status === "creation_unknown";
+          const saved = await admin.from("payment_attempts").update({provider_checked_at: new Date().toISOString(), ...(expiredCheckout ? {status:"expired",provider_status:"snap_expired"} : notCreated ? {status:"failed",provider_status:"not_created"} : {})}).eq("id", attempt.id);
           if (saved.error) return fail("Hasil pemeriksaan belum dapat disimpan", "PAYMENT_CHECK_SAVE_FAILED", 503);
         }
         const refreshed = await read();

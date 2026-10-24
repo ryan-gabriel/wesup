@@ -1,0 +1,191 @@
+erDiagram
+    AUTH_USERS ||--|| PROFILES : "1:1"
+    PROFILES {
+        uuid id PK
+        user_role role
+        account_status status
+        text full_name
+        text email
+        text phone
+    }
+    PROFILES ||--|| SUPPLIER_PROFILES : "1:1"
+    SUPPLIER_PROFILES {
+        uuid user_id PK
+        text business_name
+        text address
+        numeric latitude
+        numeric longitude
+        text nik UK
+        text ktp_photo_url
+        text business_photo_url
+        verification_status status
+    }
+    PROFILES ||--|{ SUPPLIER_BANK_ACCOUNTS : "1:N"
+    PROFILES ||--|| UMKM_PROFILES : "1:1"
+    UMKM_PROFILES {
+        uuid user_id PK
+        integer strike_count
+        timestamptz suspended_until
+        text business_name
+        text address
+        numeric latitude
+        numeric longitude
+    }
+    PROFILES ||--|{ UMKM_BANK_ACCOUNTS : "1:N"
+    
+    PROFILES ||--|{ BATCHES : "1:N (supplier)"
+    BATCHES {
+        uuid id PK
+        uuid supplier_id FK
+        uuid recurring_config_id FK
+        text title
+        text description
+        batch_category category
+        integer min_quantity
+        text product_photo_url
+        text pickup_name
+        text pickup_address
+        numeric latitude
+        numeric longitude
+        batch_status status
+    }
+    
+    BATCHES ||--|{ BATCH_TIERS : "1:N"
+    BATCH_TIERS {
+        uuid id PK
+        uuid batch_id FK
+        integer tier_number
+        integer min_volume
+        integer max_volume
+        numeric price_per_unit
+    }
+    
+    BATCHES ||--|| BATCH_TIMELINE : "1:1"
+    BATCH_TIMELINE {
+        uuid batch_id PK
+        timestamptz registration_opens_at
+        timestamptz registration_closes_at
+        timestamptz payment_opens_at
+        timestamptz payment_closes_at
+        timestamptz estimated_ready_at
+        timestamptz effective_payment_opens_at
+        timestamptz effective_payment_closes_at
+        timestamptz pickup_ends_at
+    }
+    
+    BATCHES ||--|{ REGISTRATIONS : "1:N"
+    REGISTRATIONS {
+        uuid id PK
+        uuid batch_id FK
+        uuid umkm_id FK
+        integer quantity
+        jsonb consent_terms
+        timestamptz consented_at
+        numeric consent_latitude
+        numeric consent_longitude
+        registration_status status
+        integer locked_tier_number
+        numeric locked_price_per_unit
+        numeric final_amount
+        text cancellation_reason
+    }
+    
+    REGISTRATIONS ||--|| REGISTRATION_COUNTERS : "1:1"
+    REGISTRATION_COUNTERS {
+        uuid batch_id PK
+        bigint current_count
+    }
+    
+    REGISTRATIONS ||--|| PAYMENTS : "1:1"
+    PAYMENTS {
+        uuid id PK
+        uuid registration_id FK
+        text midtrans_order_id UK
+        text midtrans_transaction_id
+        numeric gross_amount
+        payment_status status
+        text qr_code_url
+        timestamptz qr_code_expires_at
+        timestamptz paid_at
+        jsonb webhook_payload
+    }
+    
+    REGISTRATIONS ||--|| PICKUP_CODES : "1:1"
+    PICKUP_CODES {
+        uuid id PK
+        uuid registration_id FK
+        text qr_code_token UK
+        text pin_code
+        timestamptz used_at
+        uuid used_by_supplier_id FK
+    }
+    
+    REGISTRATIONS ||--|{ PICKUP_EVENTS : "1:N"
+    PICKUP_EVENTS {
+        uuid id PK
+        uuid registration_id FK
+        uuid supplier_id FK
+        pickup_method method
+        numeric latitude
+        numeric longitude
+        text notes
+        timestamptz created_at
+    }
+    
+    REGISTRATIONS ||--|| ESCROW_HOLDS : "1:1"
+    ESCROW_HOLDS {
+        uuid id PK
+        uuid registration_id FK
+        numeric amount
+        timestamptz pickup_confirmed_at
+        timestamptz auto_release_at
+        timestamptz released_at
+        escrow_status status
+        text release_destination
+        uuid dispute_id FK
+    }
+    
+    REGISTRATIONS ||--|| DISPUTES : "1:1"
+    DISPUTES {
+        uuid id PK
+        uuid registration_id FK
+        uuid umkm_id FK
+        uuid supplier_id FK
+        dispute_status status
+        text complaint_category
+        text description
+        jsonb photo_urls
+        uuid admin_id FK
+        text admin_notes
+        timestamptz decided_at
+    }
+    
+    DISPUTES ||--|{ DISPUTE_EVIDENCE : "1:N"
+    DISPUTE_EVIDENCE {
+        uuid id PK
+        uuid dispute_id FK
+        text file_url
+        uuid uploaded_by FK
+    }
+    
+    REGISTRATIONS ||--|{ REFUND_REQUESTS : "1:N"
+    REFUND_REQUESTS {
+        uuid id PK
+        uuid registration_id FK
+        uuid batch_id FK
+        refund_trigger trigger_type
+        numeric amount
+        uuid umkm_bank_account_id FK
+        uuid admin_id FK
+        text admin_notes
+        text transfer_proof_url
+        refund_status status
+    }
+    
+    REGISTRATIONS ||--|| RATINGS : "1:1"
+    RATINGS {
+        uuid id PK
+        uuid registration_id FK
+        integer score
+        text comment
+    }

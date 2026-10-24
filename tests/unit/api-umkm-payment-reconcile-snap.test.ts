@@ -48,7 +48,7 @@ function setup() {
   const client = { from: vi.fn(() => paymentQuery) };
   vi.mocked(resolveActiveUmkm).mockResolvedValue({ client, context: { userId: USER_ID, role: "umkm", status: "active" } as never, response: null });
   vi.mocked(getAdminClient).mockReturnValue(admin as never);
-  return { admin, rpc, payment };
+  return { admin, rpc, payment, attemptQuery };
 }
 
 describe("UMKM Snap payment reconciliation", () => {
@@ -94,6 +94,17 @@ describe("UMKM Snap payment reconciliation", () => {
     const response = await POST(new NextRequest(`http://localhost/api/umkm/orders/${ORDER_ID}/payment/reconcile`, { method: "POST" }), { params: Promise.resolve({ orderId: ORDER_ID }) });
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual(expect.objectContaining({ status: "not_created", reconciled: false }));
+  });
+
+  it("closes an uncertain Snap checkout that Midtrans never created so payment can be retried", async () => {
+    const { payment, attemptQuery } = setup();
+    payment.payment_attempts[0].provider_status = "creation_unknown";
+    Object.assign(payment.registration, { batch: { batch_timeline: { payment_opens_at: "2020-01-01T00:00:00Z", payment_closes_at: "2099-01-01T00:00:00Z" } } });
+    attemptQuery.update = vi.fn((row: Record<string, unknown>) => { Object.assign(payment.payment_attempts[0], row); return attemptQuery; });
+    vi.mocked(getTransactionStatus).mockRejectedValue(new MidtransProviderError("not found", 404, false));
+    const response = await POST(new NextRequest(`http://localhost/api/umkm/orders/${ORDER_ID}/payment/reconcile`, { method: "POST" }), { params: Promise.resolve({ orderId: ORDER_ID }) });
+    expect(attemptQuery.update).toHaveBeenCalledWith(expect.objectContaining({ status: "failed", provider_status: "not_created" }));
+    await expect(response.json()).resolves.toEqual(expect.objectContaining({ status: "not_created", paymentProgress: expect.objectContaining({ state: "failed", canOpenCheckout: true }) }));
   });
 
   it("applies successful provider events through the atomic Snap RPC", async () => {

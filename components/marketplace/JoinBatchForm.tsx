@@ -4,7 +4,7 @@ import { FormEvent, useState, useEffect } from "react";
 import Link from "next/link";
 import { readApiError } from "@/lib/marketplace/api-repository";
 import { feedbackError } from "@/lib/feedback/errors";
-import type { MarketplaceItem, MarketplaceProgressResponse } from "@/lib/marketplace/types";
+import type { MarketplaceItem, MarketplaceProgressResponse, ViewerRegistration } from "@/lib/marketplace/types";
 
 import { useRouter } from "next/navigation";
 import { formatTransactionDate } from "@/lib/transactions/schedule";
@@ -19,16 +19,12 @@ interface RegistrationResult {
   registrationId: string;
 }
 
-interface RegistrationConflict {
-  registrationId: string;
-  quantity: number | null;
-  canWithdraw: boolean;
-}
-
 export interface JoinBatchFormProps {
   item: MarketplaceItem;
   consentGiven: boolean;
   viewerLocation?: ViewerLocation | null;
+  /** Registration already recorded for this viewer; rendered instead of a fresh join. */
+  initialRegistration?: ViewerRegistration | null;
   onSuccess: (result: RegistrationResult) => void;
   availabilityBlocked?: boolean;
   onAvailabilityCheck?: () => Promise<MarketplaceProgressResponse | null>;
@@ -38,6 +34,7 @@ export default function JoinBatchForm({
   item,
   consentGiven,
   viewerLocation = null,
+  initialRegistration = null,
   onSuccess,
   availabilityBlocked = false,
   onAvailabilityCheck,
@@ -45,11 +42,11 @@ export default function JoinBatchForm({
   const router=useRouter();
   const [terms,setTerms]=useState(false);
   const earlyMinimum = item.earlyPayment?.proposal?.status === "pending" ? item.earlyPayment.proposal.minimumQuantity : item.earlyPayment?.originalMinimumQuantity ?? null;
-  const [quantity, setQuantity] = useState<number | "">(1);
+  const [quantity, setQuantity] = useState<number | "">(initialRegistration?.quantity ?? 1);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [succeeded, setSucceeded] = useState(false);
-  const [conflict, setConflict] = useState<RegistrationConflict | null>(null);
+  const [conflict, setConflict] = useState<ViewerRegistration | null>(initialRegistration);
   const [failedAvailability, setFailedAvailability] = useState<MarketplaceItem["availability"] | null>(null);
   const verificationFailed = failedAvailability !== null && failedAvailability === item.availability;
   const remaining = item.availability?.remainingQuantity;
@@ -142,7 +139,7 @@ export default function JoinBatchForm({
   function toDuplicateRegistration(body: {
     code?: unknown;
     details?: { registrationId?: unknown; quantity?: unknown; canWithdraw?: unknown };
-  } | null): RegistrationConflict | null {
+  } | null): ViewerRegistration | null {
     if (body?.code !== "REGISTRATION_ALREADY_EXISTS") return null;
     const registrationId = body.details?.registrationId;
     if (typeof registrationId !== "string" || registrationId.length === 0) return null;
@@ -155,7 +152,7 @@ export default function JoinBatchForm({
 
   /** Quantity changes stay cancel-then-rejoin: withdraw the active
    * registration, then register again with the new quantity. */
-  async function withdrawAndRejoin(active: RegistrationConflict) {
+  async function withdrawAndRejoin(active: ViewerRegistration) {
     if (!active.canWithdraw) {
       setError("Pendaftaran ini sudah terkunci. Buka pesanan untuk membayar atau hubungi bantuan.");
       return;
@@ -249,10 +246,10 @@ export default function JoinBatchForm({
       <button
         type="submit"
         disabled={submitDisabled}
-        className={`inline-flex w-full items-center justify-center  px-4 py-3 text-sm font-bold transition-colors ${
+        className={`inline-flex w-full items-center justify-center px-4 py-3 text-sm font-bold transition-colors ${
           !submitDisabled
             ? "bg-wesup-ink text-wesup-paper hover:bg-wesup-red"
-            : "cursor-not-allowed bg-wesup-paper-sub text-wesup-ink-sub"
+            : "cursor-not-allowed bg-wesup-paper-sub text-wesup-ink/40"
         }`}
       >
         {submitting

@@ -1,0 +1,18 @@
+flowchart TD
+    A[Pickup Confirmed] --> B[create_escrow<br/>status='held'<br/>auto_release_at=now+24h]
+    B --> C{UMKM File Complaint<br/>within 24h?}
+    C -->|No| D[Lazy Evaluation:<br/>On next API call<br/>auto_release_at ≤ now]
+    D --> E[escrow_holds.status='released'<br/>release_destination='supplier']
+    E --> F[registrations.status='completed']
+    
+    C -->|Yes| G[submit_order_complaint<br/>photo_urls required]
+    G --> H[disputes insert<br/>status='pending']
+    H --> I[escrow_holds.status='frozen'<br/>auto_release_at=NULL]
+    I --> J[Admin Review Evidence]
+    J --> K{resolve_dispute RPC}
+    K -->|UMKM Win| L[escrow status='refunded'<br/>release_destination='umkm']
+    L --> M[refund_requests insert<br/>trigger_type='dispute_won']
+    M --> N[Admin Transfer Manual<br/>complete_refund]
+    
+    K -->|Supplier Win| O[escow status='released'<br/>release_destination='supplier']
+    O --> P[registrations.status='completed']
