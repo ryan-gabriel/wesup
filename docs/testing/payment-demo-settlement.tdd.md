@@ -6,7 +6,7 @@ The order detail has a separate **Pembayaran lunas** sandbox action. A successfu
 
 The new service-only RPC reuses the incumbent payment writers and transaction. It checks invoice/checkout/window again under row locks. Simulated payments use a `DEMO:` transaction identifier, `manual` log source, `payment_demo_simulation` operation, actor and request reference. Existing price, preparation, pickup and escrow-release rules are preserved. Audit rows remain append-only.
 
-No migration, demo configuration, test account or settlement was applied to the hosted database. No commit or push was performed.
+No migration, demo configuration, test account or settlement was applied to the hosted database. The initial implementation stayed uncommitted; main integration was subsequently requested separately by the user.
 
 ## RED → GREEN
 
@@ -63,3 +63,7 @@ Before enabling the real feature:
 A parallel build/test attempt exhausted Node memory; tests were rerun with bounded workers. Final `npm.cmd test -- --maxWorkers=4`: **245 files / 2271 tests passed**. Final `npx tsc --noEmit` and final `npm run build` passed; `npm run lint` completed with **0 errors / 15 existing warnings**. `git diff --check` passed. Build preflight only read the existing hosted schema; the new migration remains unapplied there.
 
 Additional final regressions verify that a refreshed snapshot still marked pending is never reported as paid, and that Snap capability is disabled if its private checkout session is missing, cancelled or unreadable. Snap token and allowlists are not exposed by that capability check.
+
+## Main integration — 2026-10-24
+
+Integrated the five newer remote main commits through `6c35695`, preserving their registration retry and Supplier UI changes. The expanded Supplier transaction page required isolating the unrelated batch-detail child in the catalog navigation test; its incomplete repository mock had produced an uncaught exception. After that test-only fix, **245 files / 2273 tests passed without unhandled errors**. Post-integration TypeScript, production build and lint passed (0 errors, 15 existing warnings). Hosted migration and demo flags were not changed as part of this push.

@@ -7,6 +7,8 @@ import SupplierBatchTransactionCenter from "@/components/supplier-batch/Supplier
 const resource = vi.hoisted(() => ({ data: { items: [] }, loading: false, error: "", reload: vi.fn() }));
 vi.mock("@/lib/feedback/use-resource", () => ({ useFeedbackResource: () => resource }));
 vi.mock("@/components/orders/TransactionSupport", () => ({ default: () => null }));
+// This suite verifies the catalog return link; batch-detail fetching is covered separately.
+vi.mock("@/components/supplier-batch/SupplierBatchDetailClient", () => ({ default: () => null }));
 vi.mock("@/lib/supplier-catalog/api-repository", () => ({ supplierCatalogApiRepository: { getTransaction: vi.fn(async () => ({
   batch: { title: "Beras", status: "published" }, orders: [], serverTime: "2026-10-22T00:00:00Z",
   summary: { totalQuantity: 0, registered: 0, pendingPayment: 0, paid: 0, pickedUp: 0, failed: 0, refund: 0 }, capabilities: {},
